@@ -5,6 +5,11 @@ app_description = "Customized for Glenda Studio"
 app_email = "sonnynguyen.0001@gmail.com"
 app_license = "mit"
 
+# fixtures = [
+#     {"dt": "Custom Field"},
+#     {"dt": "Property Setter"}
+# ]
+
 # Apps
 # ------------------
 
@@ -48,6 +53,25 @@ app_license = "mit"
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
+app_include_css = [
+    "/assets/gs_customizations/css/kanban_inline_edit.css"
+]
+
+app_include_js = [
+    "/assets/gs_customizations/js/kanban_inline_edit.js"
+]
+
+doctype_js = {
+    "Leave Application": "overrides/hrms/leave_application/leave_application.js",
+    "Leave Allocation": "overrides/hrms/leave_allocation/leave_allocation.js",
+    # "Leave Type": "gs_customizations/public/js/leave_type.js",
+    "Task": "overrides/erpnext/task/task.js"
+}
+
+# doctype_list_js = {
+#     "Task": "overrides/erpnext/task/task_kanban.js"
+# }
+
 # Svg Icons
 # ------------------
 # include app icons in desk
@@ -84,6 +108,8 @@ app_license = "mit"
 
 # before_install = "gs_customizations.install.before_install"
 # after_install = "gs_customizations.install.after_install"
+
+after_install = "gs_customizations.install.after_install"
 
 # Uninstallation
 # ------------
@@ -125,6 +151,14 @@ app_license = "mit"
 # 	"Event": "frappe.desk.doctype.event.event.has_permission",
 # }
 
+permission_query_conditions = {
+    "Task": "gs_customizations.validate.permissions.project_query_conditions",
+}
+
+has_permission = {
+    "Task": "gs_customizations.validate.permissions.has_project_permissions",
+}
+
 # DocType Class
 # ---------------
 # Override standard doctype classes
@@ -132,6 +166,15 @@ app_license = "mit"
 # override_doctype_class = {
 # 	"ToDo": "custom_app.overrides.CustomToDo"
 # }
+
+override_doctype_class = {
+    "Leave Application": "gs_customizations.overrides.hrms.leave_application.leave_application.CustomLeaveApplication",
+    "Leave Allocation": "gs_customizations.overrides.hrms.leave_allocation.leave_allocation.CustomLeaveAllocation",
+    "Leave Ledger Entry": "gs_customizations.overrides.hrms.leave_ledger_entry.leave_ledger_entry.CustomLeaveLedgerEntry",
+    "Leave Policy Assignment": "gs_customizations.overrides.hrms.leave_policy_assignment.leave_policy_assignment.CustomLeavePolicyAssignment",
+
+    # "Task": "gs_customizations.overrides.erpnext.task.task.CustomTask",
+}
 
 # Document Events
 # ---------------
@@ -144,6 +187,18 @@ app_license = "mit"
 # 		"on_trash": "method"
 # 	}
 # }
+
+doc_events = {
+    "Company": {
+        "validate": "gs_customizations.overrides.erpnext.company.company.validate"
+    },
+    "Task": {
+        "before_load": "gs_customizations.utils.network_access.check_doctype_access",
+        "before_insert": "gs_customizations.utils.network_access.check_doctype_access",
+        "validate": "gs_customizations.overrides.erpnext.task.task.validate",
+        "on_update": "gs_customizations.synology.synology.notify_task_update",
+    }
+}
 
 # Scheduled Tasks
 # ---------------
@@ -185,6 +240,14 @@ app_license = "mit"
 # 	"Task": "gs_customizations.task.get_dashboard_data"
 # }
 
+override_whitelisted_methods = {
+    "frappe.desk.desktop.get_workspace_sidebar_items": "gs_customizations.overrides.frappe.desk.desktop.get_workspace_sidebar_items",
+
+    "frappe.desk.doctype.kanban_board.kanban_board.update_order": "gs_customizations.overrides.frappe.kanban_board.kanban_board.update_order",
+    "frappe.desk.doctype.kanban_board.kanban_board.update_order_for_single_card": "gs_customizations.overrides.frappe.kanban_board.kanban_board.update_order_for_single_card",
+    "frappe.desk.doctype.kanban_board.kanban_board.add_card": "gs_customizations.overrides.frappe.kanban_board.kanban_board.add_card",
+}
+
 # exempt linked doctypes from being automatically cancelled
 #
 # auto_cancel_exempted_doctypes = ["Auto Repeat"]
@@ -198,6 +261,8 @@ app_license = "mit"
 # ----------------
 # before_request = ["gs_customizations.utils.before_request"]
 # after_request = ["gs_customizations.utils.after_request"]
+
+before_request = ["gs_customizations.utils.network_access.block_restricted_routes"]
 
 # Job Events
 # ----------

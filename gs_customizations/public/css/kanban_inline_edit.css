@@ -1,0 +1,192 @@
+/**
+ * Kanban Inline Edit Styles
+ * 
+ * Styles for inline editing on Kanban cards
+ * Supports both light and dark themes
+ */
+
+/* ========== KANBAN GENERAL STYLES ========== */
+
+.kanban-card,
+.kanban-card * {
+    user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+}
+
+.kanban-column,
+.kanban-column * {
+    user-select: none;
+}
+
+/* ========== EDITABLE FIELD STYLES ========== */
+
+.kanban-inline-editable {
+    cursor: pointer !important;
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin: -2px -6px;
+    transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+/* Light theme hover */
+[data-theme="light"] .kanban-inline-editable:hover,
+:root:not([data-theme="dark"]) .kanban-inline-editable:hover {
+    background-color: #f0f4f7;
+}
+
+/* Dark theme hover */
+[data-theme="dark"] .kanban-inline-editable:hover {
+    background-color: #404040;
+}
+
+/* Saving state */
+.kanban-inline-editable.kanban-inline-saving {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* ========== DROPDOWN STYLES ========== */
+
+.kanban-inline-dropdown {
+    position: fixed;
+    z-index: 1060;
+    border-radius: 8px;
+    padding: 4px 0;
+    min-width: 140px;
+    max-height: 300px;
+    overflow-y: auto;
+    animation: kanban-dropdown-fade 0.15s ease;
+}
+
+/* Light theme dropdown */
+[data-theme="light"] .kanban-inline-dropdown,
+:root:not([data-theme="dark"]) .kanban-inline-dropdown {
+    background: #ffffff;
+    border: 1px solid #d1d8dd;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Dark theme dropdown */
+[data-theme="dark"] .kanban-inline-dropdown {
+    background: #333333;
+    border: 1px solid #404040;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes kanban-dropdown-fade {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ========== DROPDOWN OPTION STYLES ========== */
+
+.kanban-inline-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+    transition: background-color 0.1s ease;
+}
+
+/* Light theme option text */
+[data-theme="light"] .kanban-inline-option,
+:root:not([data-theme="dark"]) .kanban-inline-option {
+    color: #333333;
+}
+
+/* Dark theme option text */
+[data-theme="dark"] .kanban-inline-option {
+    color: #e0e0e0;
+}
+
+/* Light theme option hover */
+[data-theme="light"] .kanban-inline-option:hover,
+:root:not([data-theme="dark"]) .kanban-inline-option:hover {
+    background-color: #f4f5f6;
+}
+
+/* Dark theme option hover */
+[data-theme="dark"] .kanban-inline-option:hover {
+    background-color: #4d4d4d;
+}
+
+/* Light theme selected option */
+[data-theme="light"] .kanban-inline-option.selected,
+:root:not([data-theme="dark"]) .kanban-inline-option.selected {
+    background-color: #e3f2fd;
+    font-weight: 500;
+}
+
+/* Dark theme selected option */
+[data-theme="dark"] .kanban-inline-option.selected {
+    background-color: #595959;
+    font-weight: 500;
+}
+
+/* Selected option should not change on hover */
+.kanban-inline-option.selected:hover {
+    background-color: inherit;
+}
+
+[data-theme="light"] .kanban-inline-option.selected:hover,
+:root:not([data-theme="dark"]) .kanban-inline-option.selected:hover {
+    background-color: #e3f2fd;
+}
+
+[data-theme="dark"] .kanban-inline-option.selected:hover {
+    background-color: #1e3a5f;
+}
+
+/* ========== DROPDOWN LABEL STYLES ========== */
+
+.kanban-inline-label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ========== SCROLLBAR STYLES ========== */
+
+.kanban-inline-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.kanban-inline-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.kanban-inline-dropdown::-webkit-scrollbar-thumb {
+    background-color: #888;
+    border-radius: 3px;
+}
+
+.kanban-inline-dropdown::-webkit-scrollbar-thumb:hover {
+    background-color: #666;
+}
+
+[data-theme="dark"] .kanban-inline-dropdown::-webkit-scrollbar-thumb {
+    background-color: #555;
+}
+
+[data-theme="dark"] .kanban-inline-dropdown::-webkit-scrollbar-thumb:hover {
+    background-color: #777;
+}
+
+/* Firefox scrollbar */
+.kanban-inline-dropdown {
+    scrollbar-width: thin;
+    scrollbar-color: #888 transparent;
+}
+
+[data-theme="dark"] .kanban-inline-dropdown {
+    scrollbar-color: #555 transparent;
+}
