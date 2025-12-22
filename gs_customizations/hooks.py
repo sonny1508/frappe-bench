@@ -10,6 +10,8 @@ app_license = "mit"
 #     {"dt": "Property Setter"}
 # ]
 
+boot_session = "gs_customizations.boot.boot_session"
+
 # Apps
 # ------------------
 
@@ -53,24 +55,41 @@ app_license = "mit"
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
+web_include_css = [
+    "/assets/gs_customizations/css/login_slideshow.css"
+]
+
+web_include_js = [
+    "/assets/gs_customizations/js/login_slideshow.js"
+]
+
 app_include_css = [
-    "/assets/gs_customizations/css/kanban_inline_edit.css"
+    "/assets/gs_customizations/css/kanban.css",
+    "/assets/gs_customizations/css/kanban_inline_edit.css",
+    "/assets/gs_customizations/css/kanban_collapsible.css",
 ]
 
 app_include_js = [
-    "/assets/gs_customizations/js/kanban_inline_edit.js"
+    "/assets/gs_customizations/js/kanban.js",
+    "/assets/gs_customizations/js/kanban_inline_edit.js",
+    "/assets/gs_customizations/js/kanban_collapsible.js",
+
+    "/assets/gs_customizations/js/kanban_filters.js",
+
+    # "/assets/gs_customizations/js/global_overrides.js",
 ]
 
 doctype_js = {
     "Leave Application": "overrides/hrms/leave_application/leave_application.js",
     "Leave Allocation": "overrides/hrms/leave_allocation/leave_allocation.js",
-    # "Leave Type": "gs_customizations/public/js/leave_type.js",
-    "Task": "overrides/erpnext/task/task.js"
+
+    "Task": "overrides/erpnext/task/task.js",
+    "Workspace": "overrides/frappe/workspace/workspace.js"
 }
 
-# doctype_list_js = {
-#     "Task": "overrides/erpnext/task/task_kanban.js"
-# }
+doctype_list_js = {
+    "Task": "overrides/erpnext/task/task_list.js"
+}
 
 # Svg Icons
 # ------------------
@@ -153,11 +172,12 @@ after_install = "gs_customizations.install.after_install"
 
 permission_query_conditions = {
     "Task": "gs_customizations.validate.permissions.project_query_conditions",
+    "Task": "gs_customizations.overrides.erpnext.task.task_permissions.task_query_conditions",
 }
 
-has_permission = {
-    "Task": "gs_customizations.validate.permissions.has_project_permissions",
-}
+# has_permission = {
+#     "Task": "gs_customizations.validate.permissions.has_project_permission",
+# }
 
 # DocType Class
 # ---------------
@@ -189,6 +209,9 @@ override_doctype_class = {
 # }
 
 doc_events = {
+    "ToDo": {
+        "before_insert": "gs_customizations.validate.permissions.block_assign",
+    },
     "Company": {
         "validate": "gs_customizations.overrides.erpnext.company.company.validate"
     },
@@ -196,7 +219,18 @@ doc_events = {
         "before_load": "gs_customizations.utils.network_access.check_doctype_access",
         "before_insert": "gs_customizations.utils.network_access.check_doctype_access",
         "validate": "gs_customizations.overrides.erpnext.task.task.validate",
+        "on_change": "gs_customizations.overrides.erpnext.task.task.on_change",
         "on_update": "gs_customizations.synology.synology.notify_task_update",
+    },
+    # Currently not working for some reason
+    "Kanban Board": {
+        "after_insert": "gs_customizations.overrides.frappe.kanban_board.kanban_board.set_default_colors"
+    },
+    # Currently not working for some reason
+    "Workspace": {
+        "before_insert": "gs_customizations.overrides.frappe.workspace.workspace.validate_workspace_permission",
+        "before_save": "gs_customizations.overrides.frappe.workspace.workspace.validate_workspace_permission",
+        "on_trash": "gs_customizations.overrides.frappe.workspace.workspace.validate_workspace_delete",
     }
 }
 

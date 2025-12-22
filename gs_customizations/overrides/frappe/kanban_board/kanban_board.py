@@ -153,3 +153,21 @@ def resort_all_task_kanban_boards():
     
     frappe.db.commit()
     return f"Re-sorted {len(boards)} Task Kanban board(s)"
+
+
+def set_default_colors(doc, method):
+    if doc.reference_doctype != "Task":
+        return
+    
+    color_map = {
+        "Open": "gray",
+        "Working": "blue",
+        "QA Pending": "orange",
+        "QA Reviewing": "purple",
+        "Delivered": "green"
+    }
+
+    for col in doc.columns:
+        col.indicator_color = color_map.get(col.column_name, "blue")
+
+    doc.save(ignore_permissions=True)

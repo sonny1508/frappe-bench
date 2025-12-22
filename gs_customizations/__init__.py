@@ -1,1 +1,10 @@
 __version__= "0.1.0"
+
+def apply_report_overrides():
+	from gs_customizations.overrides.hrms.employee_leave_balance.employee_leave_balance import apply_employee_leave_balance_overrides
+	apply_employee_leave_balance_overrides()
+
+	from gs_customizations.overrides.hrms.employee_leave_balance_summary.employee_leave_balance_summary import apply_employee_leave_balance_summary_overrides
+	apply_employee_leave_balance_summary_overrides()
+	
+apply_report_overrides()

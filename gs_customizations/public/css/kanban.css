@@ -1,0 +1,42 @@
+/* ========== KANBAN GENERAL STYLES ========== */
+
+/* Disable selecting texts */
+.kanban-card,
+.kanban-card * {
+    user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+}
+
+.kanban-column,
+.kanban-column * {
+    user-select: none;
+}
+
+
+/* ========================================
+   KANBAN COLUMN SCROLLBAR
+   ======================================== */
+.kanban .kanban-column .kanban-cards {
+    scrollbar-width: auto;
+    scrollbar-color: var(--gray-400) transparent;
+}
+
+/* Chromium */
+.kanban .kanban-column .kanban-cards::-webkit-scrollbar {
+    width: 4px;
+}
+
+.kanban .kanban-column .kanban-cards::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 2px;
+}
+
+.kanban .kanban-column .kanban-cards::-webkit-scrollbar-thumb {
+    background: var(--gray-400);
+    border-radius: 2px;
+}
+
+.kanban .kanban-column .kanban-cards::-webkit-scrollbar-thumb:hover {
+    background: var(--gray-500);
+}

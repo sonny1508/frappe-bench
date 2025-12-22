@@ -1,13 +1,5 @@
 /**
  * Kanban Inline Edit - Multi-Field Support
- * 
- * Allows editing Priority, Status, Type, and Progress fields directly on Kanban cards
- * without opening the full document form.
- * 
- * Features:
- * - Dynamic option loading from DocType meta and linked DocTypes
- * - Dark/Light theme support
- * - Auto-save on change
  */
 
 (function() {
@@ -15,27 +7,37 @@
 
     const DOCTYPE = "Task";
 
+    const PRIORITY_ORDER = {
+        "Urgent": 1,
+        "High": 2,
+        "Medium": 3,
+        "Low": 4,
+        "Support": 5,
+    };
+
     // ========== FIELD CONFIGURATIONS ==========
 
     const FIELD_CONFIGS = {
-        priority: {
-            fieldname: "priority",
-            label: "Priority",
-            detectPatterns: ["Priority"],
-            optionType: "select"
-        },
         status: {
             fieldname: "status",
             label: "Status",
             detectPatterns: ["Status"],
             optionType: "select"
         },
+        priority: {
+            fieldname: "priority",
+            label: "Priority",
+            detectPatterns: ["Priority"],
+            optionType: "select",
+            restricted: true
+        },
         type: {
             fieldname: "type",
             label: "Type",
             detectPatterns: ["Type"],
             optionType: "link",
-            linkDoctype: "Task Type"
+            linkDoctype: "Task Type",
+            restricted: true
         },
         progress: {
             fieldname: "progress",
@@ -55,26 +57,62 @@
                 { value: 90, display: "90%" },
                 { value: 100, display: "100%" }
             ],
-            isNumeric: true
+            isNumeric: true,
         }
     };
 
-    // Cache for dynamically loaded options
     const optionsCache = {};
-
-    // Track which cards we've already enhanced to avoid duplicates
     const enhancedCards = new WeakSet();
+
+    // ========== PERMISSION CHECK ==========
+
+    // Computed once on init
+    let editableFieldTypes = null;
+
+    function initPermissions() {
+        const managerRoles = frappe.boot.manager_roles || [];
+        const userRoles = frappe.user_roles || [];
+        const isManager = managerRoles.some(role => userRoles.includes(role));
+        
+        // Pre-compute which fields this user can edit
+        editableFieldTypes = new Set();
+        for (const [fieldType, config] of Object.entries(FIELD_CONFIGS)) {
+            if (config.restricted !== true || isManager) {
+                editableFieldTypes.add(fieldType);
+            }
+        }
+    }
+
+    function canEditField(fieldType) {
+        return editableFieldTypes.has(fieldType);
+    }
+
+    // ========== UTILITY: DEBOUNCE ==========
+
+    function debounce(fn, delay) {
+        let timeoutId;
+        return function(...args) {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => fn.apply(this, args), delay);
+        };
+    }
+
+    // ========== UTILITY: KANBAN VIEW DETECTION ==========
+
+    function isKanbanView() {
+        // Check if we're actually on a kanban board for Task
+        return !!(
+            document.querySelector(".kanban") &&
+            cur_list?.doctype === DOCTYPE &&
+            cur_list?.view_name === "Kanban"
+        );
+    }
 
     // ========== OPTION LOADING ==========
 
-    /**
-     * Load options for a field based on its configuration
-     * Returns a Promise that resolves to an array of {value, display} objects
-     */
     async function loadFieldOptions(fieldType) {
         const config = FIELD_CONFIGS[fieldType];
 
-        // Return cached options if available
         if (optionsCache[fieldType]) {
             return optionsCache[fieldType];
         }
@@ -82,50 +120,34 @@
         let options = [];
 
         if (config.optionType === "static") {
-            // Static options defined in config (e.g., progress)
             options = config.options;
         } else if (config.optionType === "select") {
-            // Select field - get options from DocType meta
             options = await loadSelectOptions(config.fieldname);
         } else if (config.optionType === "link") {
-            // Link field - get options from linked DocType
             options = await loadLinkOptions(config.linkDoctype);
         }
 
-        // Cache the options
         optionsCache[fieldType] = options;
         return options;
     }
 
-    /**
-     * Load options from a Select field's meta
-     */
     async function loadSelectOptions(fieldname) {
         return new Promise((resolve, reject) => {
-            // Ensure meta is loaded
             frappe.model.with_doctype(DOCTYPE, function() {
                 const field = frappe.meta.get_field(DOCTYPE, fieldname);
-
                 if (!field || !field.options) {
                     reject(new Error(`Could not load options for field: ${fieldname}`));
                     return;
                 }
-
-                // Parse options (newline separated string)
                 const optionValues = field.options.split("\n").filter(opt => opt.trim());
-                const options = optionValues.map(value => ({
+                resolve(optionValues.map(value => ({
                     value: value.trim(),
                     display: value.trim()
-                }));
-
-                resolve(options);
+                })));
             });
         });
     }
 
-    /**
-     * Load options from a linked DocType
-     */
     async function loadLinkOptions(linkDoctype) {
         return new Promise((resolve, reject) => {
             frappe.call({
@@ -142,24 +164,23 @@
                         reject(new Error(`Could not load options from: ${linkDoctype}`));
                         return;
                     }
-
-                    const options = r.message.map(doc => ({
+                    resolve(r.message.map(doc => ({
                         value: doc.name,
                         display: doc.name
-                    }));
-
-                    resolve(options);
+                    })));
                 },
-                error: function() {
-                    reject(new Error(`Failed to fetch from: ${linkDoctype}`));
-                }
+                error: () => reject(new Error(`Failed to fetch from: ${linkDoctype}`))
             });
         });
     }
 
-    /**
-     * Clear options cache (useful if options change)
-     */
+    // Preload options when entering kanban view
+    function preloadOptions() {
+        Object.keys(FIELD_CONFIGS).forEach(fieldType => {
+            loadFieldOptions(fieldType).catch(() => {});
+        });
+    }
+
     function clearOptionsCache(fieldType) {
         if (fieldType) {
             delete optionsCache[fieldType];
@@ -168,7 +189,6 @@
         }
     }
 
-    // Expose cache clearing function globally for manual refresh if needed
     window.clearKanbanOptionsCache = clearOptionsCache;
 
     // ========== THEME DETECTION ==========
@@ -179,56 +199,34 @@
 
     // ========== FIELD DETECTION ==========
 
-    /**
-     * Detect which field type a div contains based on its text content
-     */
     function detectFieldType($div) {
         const text = $div.text();
-
         for (const [key, config] of Object.entries(FIELD_CONFIGS)) {
-            // Check if any detection pattern matches
-            const patternMatch = config.detectPatterns.some(pattern => text.includes(pattern));
-            if (patternMatch) {
+            if (config.detectPatterns.some(pattern => text.includes(pattern))) {
                 return key;
             }
         }
-
         return null;
     }
 
-    /**
-     * Extract current value from field text
-     */
     function extractCurrentValue($div, fieldType) {
         const config = FIELD_CONFIGS[fieldType];
         const text = $div.text();
 
         if (config.isNumeric) {
-            // Extract number from text like "% Progress: 25,000%" or "Progress: 50%"
-            // Handle comma as decimal separator (European format)
             const match = text.match(/(\d+)[,.]?\d*/);
             if (match) {
-                const num = parseInt(match[1], 10);
-                // Round to nearest 10
-                return Math.round(num / 10) * 10;
+                return Math.round(parseInt(match[1], 10) / 10) * 10;
             }
             return 0;
         } else {
-            // For select/link fields, extract value after the colon
-            // Format is typically "Label: Value"
             const colonIndex = text.indexOf(":");
-            if (colonIndex !== -1) {
-                return text.substring(colonIndex + 1).trim();
-            }
-            return text.trim();
+            return colonIndex !== -1 ? text.substring(colonIndex + 1).trim() : text.trim();
         }
     }
 
     // ========== CARD ENHANCEMENT ==========
 
-    /**
-     * Enhance a single kanban card with inline editing for all supported fields
-     */
     function enhanceCard($card) {
         if (enhancedCards.has($card[0])) return;
         enhancedCards.add($card[0]);
@@ -242,8 +240,10 @@
         $docContent.children("div").each(function() {
             const $div = $(this);
             const fieldType = detectFieldType($div);
-
             if (!fieldType) return;
+
+            // Skip restricted fields for non-managers
+            if (!canEditField(fieldType)) return;
 
             const currentValue = extractCurrentValue($div, fieldType);
             const config = FIELD_CONFIGS[fieldType];
@@ -257,37 +257,49 @@
     }
 
     /**
-     * Scan and enhance all kanban cards on the page
+     * Enhanced: Only process new/unenhanced cards
      */
-    function enhanceAllCards() {
-        $(".kanban-card-wrapper").each(function() {
-            enhanceCard($(this));
+    function enhanceNewCards($container) {
+        if (!isKanbanView()) return;
+
+        const $cards = $container 
+            ? $container.find(".kanban-card-wrapper")
+            : $(".kanban-card-wrapper");
+
+        $cards.each(function() {
+            if (!enhancedCards.has(this)) {
+                enhanceCard($(this));
+            }
         });
     }
+
+    // Debounced version for mutation observer
+    const debouncedEnhance = debounce(() => enhanceNewCards(), 100);
 
     // ========== MUTATION OBSERVER ==========
 
     function setupObserver() {
         const observer = new MutationObserver(function(mutations) {
-            let shouldEnhance = false;
+            if (!isKanbanView()) return;
+
+            let hasNewCards = false;
 
             for (const mutation of mutations) {
-                if (mutation.addedNodes.length) {
-                    for (const node of mutation.addedNodes) {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            if ($(node).hasClass("kanban-card-wrapper") ||
-                                $(node).find(".kanban-card-wrapper").length) {
-                                shouldEnhance = true;
-                                break;
-                            }
-                        }
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+
+                    const $node = $(node);
+                    if ($node.hasClass("kanban-card-wrapper") ||
+                        $node.find(".kanban-card-wrapper").length) {
+                        hasNewCards = true;
+                        break;
                     }
                 }
-                if (shouldEnhance) break;
+                if (hasNewCards) break;
             }
 
-            if (shouldEnhance) {
-                setTimeout(enhanceAllCards, 50);
+            if (hasNewCards) {
+                debouncedEnhance();
             }
         });
 
@@ -301,13 +313,9 @@
 
     // ========== DROPDOWN UI ==========
 
-    /**
-     * Show dropdown for field selection
-     */
     async function showDropdown($field, fieldType, docname, currentValue) {
         $(".kanban-inline-dropdown").remove();
 
-        // Load options dynamically
         let options;
         try {
             options = await loadFieldOptions(fieldType);
@@ -327,31 +335,21 @@
             return;
         }
 
-        const config = FIELD_CONFIGS[fieldType];
-
         const optionsHtml = options.map(opt => {
-            const value = opt.value;
-            const displayText = opt.display || opt.value;
-            const isSelected = String(value) === String(currentValue) ? "selected" : "";
-
-            return `
-                <div class="kanban-inline-option ${isSelected}" data-value="${value}">
-                    <span class="kanban-inline-label">${displayText}</span>
-                </div>
-            `;
+            const isSelected = String(opt.value) === String(currentValue) ? "selected" : "";
+            return `<div class="kanban-inline-option ${isSelected}" data-value="${opt.value}">
+                <span class="kanban-inline-label">${opt.display || opt.value}</span>
+            </div>`;
         }).join("");
 
         const $dropdown = $(`<div class="kanban-inline-dropdown" data-field-type="${fieldType}">${optionsHtml}</div>`);
 
-        // Position dropdown
         const rect = $field[0].getBoundingClientRect();
         let top = rect.bottom + 4;
         let left = rect.left;
 
-        // Append first to get dimensions
         $("body").append($dropdown);
 
-        // Adjust if dropdown would go off screen
         const dropdownRect = $dropdown[0].getBoundingClientRect();
         if (top + dropdownRect.height > window.innerHeight) {
             top = rect.top - dropdownRect.height - 4;
@@ -360,9 +358,8 @@
             left = window.innerWidth - dropdownRect.width - 10;
         }
 
-        $dropdown.css({ "top": top + "px", "left": left + "px" });
+        $dropdown.css({ top: top + "px", left: left + "px" });
 
-        // Handle selection
         $dropdown.on("click", ".kanban-inline-option", function(e) {
             e.stopPropagation();
             e.preventDefault();
@@ -375,29 +372,17 @@
             }
         });
 
-        // Close on outside click
         setTimeout(() => {
-            $(document).one("click.kanban-dropdown", function() {
-                $dropdown.remove();
-            });
+            $(document).one("click.kanban-dropdown", () => $dropdown.remove());
         }, 10);
     }
 
     // ========== SAVE FUNCTIONALITY ==========
 
-    /**
-     * Save the new value to the server
-     */
     function saveValue(fieldType, docname, newValue, $field) {
         const config = FIELD_CONFIGS[fieldType];
+        const saveVal = config.isNumeric ? parseFloat(newValue) : newValue;
 
-        // Convert to proper type for saving
-        let saveValue = newValue;
-        if (config.isNumeric) {
-            saveValue = parseFloat(newValue);
-        }
-
-        // Visual feedback
         $field.addClass("kanban-inline-saving");
 
         frappe.call({
@@ -406,7 +391,7 @@
                 doctype: DOCTYPE,
                 name: docname,
                 fieldname: config.fieldname,
-                value: saveValue
+                value: saveVal
             },
             callback: function(r) {
                 $field.removeClass("kanban-inline-saving");
@@ -419,10 +404,7 @@
                     return;
                 }
 
-                // Update the stored current value
                 $field.attr("data-current-value", newValue);
-
-                // Update display text
                 updateFieldDisplay($field, fieldType, newValue);
 
                 frappe.show_alert({
@@ -432,6 +414,10 @@
 
                 if (config.fieldname === "status") {
                     moveCardToColumn($field.closest(".kanban-card-wrapper"), newValue);
+                }
+
+                if (config.fieldname === "priority") {
+                    reorderColumnByPriority($field.closest(".kanban-column"));
                 }
             },
             error: function() {
@@ -444,9 +430,6 @@
         });
     }
 
-    /**
-     * Get display value for a field
-     */
     function getDisplayValue(fieldType, value) {
         const config = FIELD_CONFIGS[fieldType];
         if (config.isNumeric && config.options) {
@@ -456,65 +439,76 @@
         return value;
     }
 
-    /**
-     * Update the visual display of the field after save
-     */
     function updateFieldDisplay($field, fieldType, newValue) {
         const displayValue = getDisplayValue(fieldType, newValue);
-
-        // Try to find value span (usually the last one or one after a label)
         const $spans = $field.find("span");
 
         if ($spans.length >= 2) {
-            // Format like "Label: Value" - update last span
             $spans.last().text(displayValue);
         } else if ($spans.length === 1) {
             $spans.text(displayValue);
         } else {
-            // No spans - try to preserve label if present
             const currentText = $field.text();
             const labelMatch = currentText.match(/^([^:]+:\s*)/);
-            if (labelMatch) {
-                $field.text(labelMatch[1] + displayValue);
-            } else {
-                $field.text(displayValue);
-            }
+            $field.text(labelMatch ? labelMatch[1] + displayValue : displayValue);
         }
     }
 
-    /**
-     * Move a card to the appropriate column based on new status value
-     * Mimics drag-and-drop behavior without full board refresh
-     */
+    // ========== CARD MOVEMENT ==========
+
     function moveCardToColumn($card, newStatus) {
         if (!$card.length) return;
-        
-        // Find the target column by status value
+
         const $targetColumn = $(`.kanban-column[data-column-value="${newStatus}"]`);
-        
         if (!$targetColumn.length) return;
-        
+
         const $currentColumn = $card.closest(".kanban-column");
-        
-        // Only move if actually changing columns
         if ($currentColumn.attr("data-column-value") === newStatus) return;
-        
-        // Find the cards container within the column
+
         const $targetCards = $targetColumn.find(".kanban-cards");
-        
         if (!$targetCards.length) return;
-        
-        // Detach and append to new column
-        $card.detach().appendTo($targetCards);
-        
-        // Update column card counts if they exist
-        updateColumnCount($currentColumn, -1);
-        updateColumnCount($targetColumn, 1);
+
+        // Batch DOM update
+        requestAnimationFrame(() => {
+            $card.detach().appendTo($targetCards);
+            updateColumnCount($currentColumn, -1);
+            updateColumnCount($targetColumn, 1);
+            // Reorder after move
+            reorderColumnByPriority($targetColumn);
+        });
     }
 
     /**
-     * Update the card count display in a column header
+     * Optimized: Reorder a single column, batch DOM writes
      */
+    function reorderColumnByPriority($column) {
+        if (!$column || !$column.length) return;
+
+        const $cardsContainer = $column.find(".kanban-cards");
+        if (!$cardsContainer.length) return;
+
+        const cards = $cardsContainer.find(".kanban-card-wrapper").toArray();
+        if (cards.length < 2) return;
+
+        // Pre-extract priorities (avoid DOM reads during sort)
+        const cardPriorities = new Map();
+        cards.forEach(card => {
+            const $priorityField = $(card).find('[data-fieldname="priority"]');
+            const priority = $priorityField.attr('data-current-value') || '';
+            cardPriorities.set(card, PRIORITY_ORDER[priority] ?? 99);
+        });
+
+        // Sort using cached values
+        cards.sort((a, b) => cardPriorities.get(a) - cardPriorities.get(b));
+
+        // Batch DOM writes using DocumentFragment
+        requestAnimationFrame(() => {
+            const fragment = document.createDocumentFragment();
+            cards.forEach(card => fragment.appendChild(card));
+            $cardsContainer[0].appendChild(fragment);
+        });
+    }
+
     function updateColumnCount($column, delta) {
         const $count = $column.find(".column-card-count, .kanban-column-count");
         if ($count.length) {
@@ -523,16 +517,63 @@
         }
     }
 
+    // ========== DRAG DROP SYNC ==========
+
+    function setupDragDropSync() {
+        // Instead of monkey-patching unfreeze, listen to specific kanban events
+        // or use a more targeted approach
+        
+        // Option 1: Listen to frappe's kanban-specific events if available
+        $(document).on('kanban:card:drop', syncAfterDragDrop);
+        
+        // Option 2: Debounced, conditional sync on route change TO kanban
+        frappe.router.on('change', () => {
+            if (isKanbanView()) {
+                debouncedSyncColumns();
+            }
+        });
+    }
+
+    const debouncedSyncColumns = debounce(() => {
+        if (!isKanbanView()) return;
+        syncAllCardsWithColumns();
+    }, 250);
+
+    function syncAfterDragDrop() {
+        if (!isKanbanView()) return;
+        
+        requestAnimationFrame(() => {
+            syncAllCardsWithColumns();
+        });
+    }
+
+    function syncAllCardsWithColumns() {
+        const columns = document.querySelectorAll('.kanban-column');
+        
+        columns.forEach(column => {
+            const $column = $(column);
+            const columnStatus = $column.attr('data-column-value');
+            if (!columnStatus) return;
+
+            // Update status displays
+            $column.find('.kanban-card-wrapper').each(function() {
+                const $statusField = $(this).find('[data-fieldname="status"]');
+                if ($statusField.length && $statusField.attr('data-current-value') !== columnStatus) {
+                    $statusField.attr('data-current-value', columnStatus);
+                    updateFieldDisplay($statusField, 'status', columnStatus);
+                }
+            });
+
+            // Reorder this column
+            reorderColumnByPriority($column);
+        });
+    }
+
     // ========== THEME CHANGE LISTENER ==========
 
     function setupThemeListener() {
-        const observer = new MutationObserver(function(mutations) {
-            for (const mutation of mutations) {
-                if (mutation.type === "attributes" && mutation.attributeName === "data-theme") {
-                    // Theme changed - close any open dropdowns
-                    $(".kanban-inline-dropdown").remove();
-                }
-            }
+        const observer = new MutationObserver(() => {
+            $(".kanban-inline-dropdown").remove();
         });
 
         observer.observe(document.documentElement, {
@@ -541,44 +582,38 @@
         });
     }
 
-    // ========== DRAG DROP SYNC ==========
-
-    function setupDragDropSync() {
-        const originalUnfreeze = frappe.dom.unfreeze;
-        
-        frappe.dom.unfreeze = function() {
-            originalUnfreeze.apply(this, arguments);
-            // Sync card displays after drag-drop completes
-            setTimeout(syncAllCardsWithColumns, 100);
-        };
-    }
-
-    function syncAllCardsWithColumns() {
-        $('.kanban-card-wrapper').each(function() {
-            const $card = $(this);
-            const $column = $card.closest('.kanban-column');
-            const columnStatus = $column.attr('data-column-value');
-            
-            if (!columnStatus) return;
-            
-            const $statusField = $card.find('[data-fieldname="status"]');
-            if ($statusField.length && $statusField.attr('data-current-value') !== columnStatus) {
-                $statusField.attr('data-current-value', columnStatus);
-                updateFieldDisplay($statusField, 'status', columnStatus);
-            }
-        });
-    }
-
     // ========== INITIALIZATION ==========
 
+    let observerInstance = null;
+
     function init() {
-        setupObserver();
+        initPermissions();
         setupThemeListener();
-        enhanceAllCards();
         setupDragDropSync();
 
-        // Enhance on SPA navigation
-        $(document).on("page-change", enhanceAllCards);
+        // Always set up the observer once (it has internal guards)
+        if (!observerInstance) {
+            observerInstance = setupObserver();
+        }
+
+        // Try initial enhancement with a small delay for cur_list to populate
+        setTimeout(() => {
+            if (isKanbanView()) {
+                preloadOptions();
+                enhanceNewCards();
+            }
+        }, 100);
+
+        // Re-init when navigating to kanban view
+        $(document).on("page-change", () => {
+            // Delay to let Frappe set up cur_list
+            setTimeout(() => {
+                if (isKanbanView()) {
+                    preloadOptions();
+                    enhanceNewCards();
+                }
+            }, 150);
+        });
 
         // Event delegation for clicking editable fields
         $(document).on("click", ".kanban-inline-editable", function(e) {
@@ -594,8 +629,6 @@
                 showDropdown($field, fieldType, docname, currentValue);
             }
         });
-
-        // console.log("Kanban inline edit (multi-field) initialized");
     }
 
     $(document).ready(init);

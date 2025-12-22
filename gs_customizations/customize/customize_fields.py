@@ -19,6 +19,7 @@ def apply_custom_properties():
 	property_leave_policy_detail()
 
 	property_task()
+	property_task_type()
 	property_timesheet()
 
 # FRAPPE APP
@@ -341,13 +342,6 @@ def property_leave_application():
 		"Check",
 	),
 	make_property_setter(
-		"Leave Application",
-		"follow_via_email",
-		"default",
-		"0",
-		"Text",
-	),
-	make_property_setter(
 		doctype="Leave Application",
 		fieldname="",
 		property="field_order",
@@ -403,6 +397,7 @@ def custom_leave_type():
 			{
 				"fieldname": "custom_max_continuous_time_allowed",
 				"fieldtype": "Duration",
+				"hide_days": 1,
 				"hide_seconds": 1,
 				"in_list_view": 1,
 				"insert_after": "max_continuous_days_allowed",
@@ -435,6 +430,27 @@ def property_leave_type():
 		"Data",
 	),
 	make_property_setter(
+		"Leave Type",
+		"max_leaves_allowed",
+		"hide_seconds",
+		"1",
+		"Check",
+	),
+	make_property_setter(
+		"Leave Type",
+		"max_leaves_allowed",
+		"hide_days",
+		"1",
+		"Check",
+	),
+	make_property_setter(
+		"Leave Type",
+		"maximum_carry_forwarded_leaves",
+		"fieldtype",
+		"Duration",
+		"Data",
+	),
+	make_property_setter(
 		doctype="Leave Type",
 		fieldname="",
 		property="field_order",
@@ -451,12 +467,40 @@ def property_leave_policy_detail():
 		"fieldtype",
 		"Duration",
 		"Data",
+	),
+	make_property_setter(
+		"Leave Policy Detail",
+		"annual_allocation",
+		"hide_days",
+		"1",
+		"Check",
+	),
+	make_property_setter(
+		"Leave Policy Detail",
+		"annual_allocation",
+		"hide_seconds",
+		"1",
+		"Check",
 	)
 
 
 # ERPNEXT APP
 
 # =============== TASK DOCTYPE ===============
+
+def custom_task():
+	create_custom_fields({
+		"Task": [
+			{
+				"fieldname": "custom_assign_to_id",
+				"fieldtype": "Link",
+				"insert_after": "type",
+				"is_system_generated": 0,
+				"label": "Assign To ID",
+				"options": "Employee",
+			},
+		]
+	})
 
 def property_task():	
 	make_property_setter(
@@ -475,7 +519,7 @@ def property_task():
 	),
 	make_property_setter(
 		"Task",
-		"progress",
+		"type",
 		"in_list_view",
 		"1",
 		"Check",
@@ -483,7 +527,25 @@ def property_task():
 	make_property_setter(
 		"Task",
 		"type",
-		"in_list_view",
+		"is_milestone",
+		"0",
+		"Check",
+	),
+	make_property_setter(
+		"Task",
+		"task_weight",
+		"hidden",
+		"1",
+		"Check",
+	)
+
+# =============== TASK TYPE DOCTYPE ===============
+
+def property_task_type():
+	make_property_setter(
+		"Task Type",
+		"weight",
+		"hidden",
 		"1",
 		"Check",
 	)

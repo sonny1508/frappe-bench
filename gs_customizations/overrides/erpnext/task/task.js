@@ -37,7 +37,7 @@ function apply_task_field_permissions(frm) {
     if (frm.is_new()) return;
     
     const is_projects_manager = frappe.user_roles.includes('Projects Manager');
-    const is_projects_user = frappe.user_roles.includes('GS Projects User');
+    const is_projects_user = frappe.user_roles.includes('GS - Projects User');
     
     if (is_projects_manager) return;
     if (!is_projects_user) return;
