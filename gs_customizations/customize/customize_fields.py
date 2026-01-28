@@ -483,6 +483,31 @@ def property_leave_policy_detail():
 		"Check",
 	)
 
+# =============== ATTENDANCE DOCTYPE ===============
+
+def property_attendance():	
+	make_property_setter(
+		"Attendance",
+		"working_hours",
+		"precision",
+		"2",
+		"Data",
+	),
+	make_property_setter(
+		"Leave Policy Detail",
+		"annual_allocation",
+		"hide_days",
+		"1",
+		"Check",
+	),
+	make_property_setter(
+		"Leave Policy Detail",
+		"annual_allocation",
+		"hide_seconds",
+		"1",
+		"Check",
+	)
+
 
 # ERPNEXT APP
 
@@ -493,12 +518,29 @@ def custom_task():
 		"Task": [
 			{
 				"fieldname": "custom_assign_to_id",
-				"fieldtype": "Link",
+				"fieldtype": "Data",
 				"insert_after": "type",
+				"is_hidden": 1,
 				"is_system_generated": 0,
 				"label": "Assign To ID",
-				"options": "Employee",
+				"read_only": 1,
 			},
+			{
+				"fieldname": "custom_assign_to_employee",
+				"fieldtype": "Data",
+				"insert_after": "custom_assign_to_id",
+				"is_system_generated": 0,
+				"label": "Assign To Employee",
+				"read_only": 1,
+			},
+			{
+				"fieldname": "custom_reviewer",
+				"fieldtype": "Data",
+				"insert_after": "parent_task",
+				"is_system_generated": 0,
+				"label": "Reviewer",
+				"read_only": 1,
+			},			
 		]
 	})
 
@@ -507,7 +549,7 @@ def property_task():
 		"Task",
 		"status",
 		"options",
-		"Open\nWorking\nQA Pending\nQA Reviewing\nQA Feedback\nDelivered\nClient Feedback\nOverdue\nCompleted\nCancelled\nTemplate",
+		"Open\nWorking\nQA Pending\nQA Reviewing\nQA Feedback\nQA Approved\nDelivered\nClient Feedback\nOverdue\nCompleted\nCancelled\nClosed\nTemplate",
 		"Text",
 	),
 	make_property_setter(

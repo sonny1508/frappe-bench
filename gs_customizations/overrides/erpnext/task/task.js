@@ -35,14 +35,14 @@ function set_color_by_priority(frm) {
 
 function apply_task_field_permissions(frm) {
     if (frm.is_new()) return;
+
+    const managerRoles = frappe.boot.manager_roles || [];
+    const userRoles = frappe.user_roles || [];
+    const is_manager = managerRoles.some(role => userRoles.includes(role));
     
-    const is_projects_manager = frappe.user_roles.includes('Projects Manager');
-    const is_projects_user = frappe.user_roles.includes('GS - Projects User');
+    if (is_manager) return;
     
-    if (is_projects_manager) return;
-    if (!is_projects_user) return;
-    
-    const allowed_fields = ['status', 'progress'];
+    const allowed_fields = ['progress'];
     
     check_task_user_assignment(frm).then(is_assigned => {
         const meta = frappe.get_meta('Task');
@@ -60,18 +60,6 @@ function apply_task_field_permissions(frm) {
                 frm.set_df_property(fieldname, 'read_only', 1);
             }
         });
-        
-        // if (!is_assigned) {
-        //     frm.set_intro(
-        //         __('You are not assigned to this task. All fields are read-only.'),
-        //         'yellow'
-        //     );
-        // } else {
-        //     frm.set_intro(
-        //         __('You can only modify Status and Progress fields.'),
-        //         'blue'
-        //     );
-        // }
         
         frm.refresh_fields();
     });

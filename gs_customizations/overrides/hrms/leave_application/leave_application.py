@@ -24,6 +24,7 @@ from frappe.utils import (
 	time_diff_in_seconds,
 )
 
+from erpnext.buying.doctype.supplier_scorecard.supplier_scorecard import daterange
 from erpnext.setup.doctype.employee.employee import get_holiday_list_for_employee
 
 import hrms
@@ -77,7 +78,103 @@ class CustomLeaveApplication(LeaveApplication):
 			self.validate_times_within_working_hours()
 			self.validate_times_order()
 			self.validate_times_hours()
-	
+
+	# override so that it targets the correct update_attendance
+	def on_submit(self):
+		if self.status in ["Open", "Cancelled"]:
+			frappe.throw(_("Only Leave Applications with status 'Approved' and 'Rejected' can be submitted"))
+
+		self.validate_back_dated_application()
+		self.update_attendance()
+		self.validate_for_self_approval()
+
+		# notify leave applier about approval
+		if frappe.db.get_single_value("HR Settings", "send_leave_notification"):
+			self.notify_employee()
+
+		self.create_leave_ledger_entry()
+		self.reload()
+
+	# override so that it targets the correct create_or_update_attendance
+	def update_attendance(self):
+		if self.status != "Approved":
+			return
+
+		holiday_dates = []
+		if not frappe.db.get_value("Leave Type", self.leave_type, "include_holiday"):
+			holiday_dates = get_holiday_dates_for_employee(self.employee, self.from_date, self.to_date)
+
+		for dt in daterange(getdate(self.from_date), getdate(self.to_date)):
+			date = dt.strftime("%Y-%m-%d")
+			# check for existing attenadnce absent or if half day with half day status absent,
+			attendance_name = frappe.db.exists(
+				"Attendance",
+				dict(
+					employee=self.employee,
+					attendance_date=date,
+					docstatus=("!=", 2),
+				),
+			)
+			# don't mark attendance for holidays
+			# if leave type does not include holidays within leaves as leaves
+			if date in holiday_dates:
+				if attendance_name:
+					# cancel and delete existing attendance for holidays
+					attendance = frappe.get_doc("Attendance", attendance_name)
+					attendance.flags.ignore_permissions = True
+					if attendance.docstatus == 1:
+						attendance.cancel()
+					frappe.delete_doc("Attendance", attendance_name, force=1)
+				continue
+
+			self.create_or_update_attendance(attendance_name, date)
+
+	def create_or_update_attendance(self, attendance_name, date):
+		# Determine status based on half day or custom single date (hours-based leave)
+		status = (
+			"Hours Leave" if self.custom_use_single_date and getdate(date) == getdate(self.custom_single_date) else "On Leave"
+		)
+
+		if attendance_name:
+			# update existing attendance, change absent to on leave or half day
+			doc = frappe.get_doc("Attendance", attendance_name)
+			half_day_status = None if status == "On Leave" else "Present"
+			modify_half_day_status = 1 if doc.status == "Absent" and status == "Hours Leave" else 0
+			
+			update_dict = {
+				"status": status,
+				"leave_type": self.leave_type,
+				"leave_application": self.name,
+				"half_day_status": half_day_status,
+				"modify_half_day_status": modify_half_day_status,
+			}
+			
+			# Set custom_total_leave_time only if custom_use_single_date is enabled
+			if self.custom_use_single_date:
+				update_dict["custom_total_leave_time"] = self.custom_total_leave_time
+			
+			doc.db_set(update_dict)
+		else:
+			# make new attendance and submit it
+			doc = frappe.new_doc("Attendance")
+			doc.employee = self.employee
+			doc.employee_name = self.employee_name
+			doc.attendance_date = date
+			doc.company = self.company
+			doc.leave_type = self.leave_type
+			doc.leave_application = self.name
+			doc.status = status
+			doc.half_day_status = "Present" if status == "Hours Leave" else None
+			doc.modify_half_day_status = 1 if status == "Leave Hours" else 0
+			
+			# Set custom_total_leave_time only if custom_use_single_date is enabled
+			if self.custom_use_single_date:
+				doc.custom_total_leave_time = self.custom_total_leave_time
+			
+			doc.flags.ignore_validate = True  # ignores check leave record validation in attendance
+			doc.insert(ignore_permissions=True)
+			doc.submit()
+
 	def validate_times_within_working_hours(self):
 		"""Validate that custom_from_time and custom_to_time are within company working hours"""
 		company_doc = frappe.get_cached_doc("Company", self.company)
@@ -123,21 +220,30 @@ class CustomLeaveApplication(LeaveApplication):
 
 	def validate_times_hours(self):
 		"""Validate that custom_from_time and custom_to_time are whole hours (no minutes or seconds)"""
-		custom_from_time = get_time(self.custom_from_time)
-		custom_to_time = get_time(self.custom_to_time)
+		# custom_from_time = get_time(self.custom_from_time)
+		# custom_to_time = get_time(self.custom_to_time)
 		
-		if custom_from_time.minute != 0 or custom_from_time.second != 0:
-			frappe.throw(
-				_("From Time ({0}) must be a whole hour (no minutes or seconds)").format(
-					self.custom_from_time
-				)
-			)
+		# if custom_from_time.minute != 0 or custom_from_time.second != 0:
+		# 	frappe.throw(
+		# 		_("From Time ({0}) must be a whole hour (no minutes or seconds)").format(
+		# 			self.custom_from_time
+		# 		)
+		# 	)
 		
-		if custom_to_time.minute != 0 or custom_to_time.second != 0:
+		# if custom_to_time.minute != 0 or custom_to_time.second != 0:
+		# 	frappe.throw(
+		# 		_("To Time ({0}) must be a whole hour (no minutes or seconds)").format(
+		# 			self.custom_to_time
+		# 		)
+		# 	)
+
+		if not self.custom_total_leave_time:
+			return
+		
+		# Duration is stored in seconds, so check if divisible by 3600 (1 hour)
+		if self.custom_total_leave_time % 3600 != 0:
 			frappe.throw(
-				_("To Time ({0}) must be a whole hour (no minutes or seconds)").format(
-					self.custom_to_time
-				)
+				_("Total Leave Time must be a whole number of hours (no minutes or seconds)")
 			)
 
 	# override to use custom_total_leave_time instead of total_leave_days
@@ -511,11 +617,11 @@ def get_leave_details(employee, date, for_salary_slip=False):
 		expired_leaves = allocation.total_leaves_allocated - (remaining_leaves + leaves_taken)
 
 		leave_allocation[d] = {
-			"total_leaves": format_duration(flt(allocation.total_leaves_allocated)),
-			"expired_leaves": format_duration(flt(expired_leaves)) if expired_leaves > 0 else 0,
-			"leaves_taken": format_duration(flt(leaves_taken)),
-			"leaves_pending_approval": format_duration(flt(leaves_pending)),
-			"remaining_leaves": format_duration(flt(remaining_leaves)),
+			"total_leaves": format_duration(flt(allocation.total_leaves_allocated), hide_days=True),
+			"expired_leaves": format_duration(flt(expired_leaves), hide_days=True) if expired_leaves > 0 else 0,
+			"leaves_taken": format_duration(flt(leaves_taken), hide_days=True),
+			"leaves_pending_approval": format_duration(flt(leaves_pending), hide_days=True),
+			"remaining_leaves": format_duration(flt(remaining_leaves), hide_days=True),
 		}
 
 	# is used in set query

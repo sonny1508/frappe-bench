@@ -10,6 +10,32 @@ TASK_PRIORITY_ORDER = {
     "Support": 5
 }
 
+TASK_COLUMN_INDICATORS = {
+    "Open": "cyan",
+    "Working": "blue",
+    "QA Pending": "purple",
+    "QA Reviewing": "pink",
+    "QA Feedback": "yellow",
+    "QA Approved": "green",
+    "Delivered": "cyan",
+    "Client Feedback": "yellow",
+    "Overdue": "red",
+    "Completed": "green",
+    "Cancelled": "cyan",
+    "Template": "grey",
+    # add more as needed
+}
+
+def set_default_indicators(doc, method=None):
+    if doc.reference_doctype != "Task":
+        return
+    
+    for column in doc.columns:
+        # Only set if indicator is not already set (preserve user customizations)
+        if not column.indicator and column.column_name in TASK_COLUMN_INDICATORS:
+            column.indicator = TASK_COLUMN_INDICATORS[column.column_name]
+
+
 def get_order_for_column(board, colname):
     """Override: Get card order sorted by priority for Task doctype"""
     filters = [[board.reference_doctype, board.field_name, "=", colname]]
@@ -22,14 +48,18 @@ def get_order_for_column(board, colname):
         tasks = frappe.get_list(
             board.reference_doctype,
             filters=filters,
-            fields=["name", "priority", "modified"]
+            fields=["name", "priority"]
         )
         
         # Sort by priority first, then by modified ascending (oldest first within same priority)
-        tasks.sort(key=lambda x: (
-            TASK_PRIORITY_ORDER.get(x.get("priority"), 99),
-            x.get("modified")
-        ))
+        # tasks.sort(key=lambda x: (
+        #     TASK_PRIORITY_ORDER.get(x.get("priority"), 99),
+        #     x.get("modified")
+        # ))
+
+        tasks.sort(key=lambda x:
+            TASK_PRIORITY_ORDER.get(x.get("priority"), 99)
+        )
         
         return frappe.as_json([t.name for t in tasks])
     else:
@@ -153,21 +183,3 @@ def resort_all_task_kanban_boards():
     
     frappe.db.commit()
     return f"Re-sorted {len(boards)} Task Kanban board(s)"
-
-
-def set_default_colors(doc, method):
-    if doc.reference_doctype != "Task":
-        return
-    
-    color_map = {
-        "Open": "gray",
-        "Working": "blue",
-        "QA Pending": "orange",
-        "QA Reviewing": "purple",
-        "Delivered": "green"
-    }
-
-    for col in doc.columns:
-        col.indicator_color = color_map.get(col.column_name, "blue")
-
-    doc.save(ignore_permissions=True)

@@ -2,6 +2,7 @@ import frappe
 import requests
 import json
 
+
 def notify_task_update(doc, method):
     """
     Send Synology Chat notifications when Task status changes.
@@ -16,66 +17,131 @@ def notify_task_update(doc, method):
     
     base_url = synology_config.get("base_url")
     employees = synology_config.get("employees", {})
-    groups = synology_config.get("groups", {})
     status_notifications = synology_config.get("status_notifications", {})
     
     # Check if this status should trigger notifications
     status_config = status_notifications.get(doc.status)
     if not status_config:
-        return  # This status doesn't require notifications
-    
-    # Build the message
-    message = f"Task `{doc.subject}` is now {doc.status}"
-    
-    if doc.project:
-        project_name = frappe.db.get_value("Project", doc.project, "project_name")
-        message += f"\nProject: {project_name}"
+        return
     
     # Get assigned users
+    assignees = get_task_assignees(doc.name)
+
+    # Get project subscribers if project exists
+    subscribers = []
+    if doc.project:
+        subscribers = get_project_subscribers(doc.project)
+
+    # Determine who to notify based on status config
+    recipients = get_recipients(status_config, assignees, subscribers)
+    
+    if not recipients:
+        return
+
+    # Build the message
+    message = build_message(doc, assignees)
+    
+    # Collect webhook URLs for all recipients
+    urls_to_notify = []
+    for username in recipients:
+        if username in employees:
+            urls_to_notify.append(base_url + employees[username])
+        else:
+            frappe.logger().warning(f"No Synology Chat token found for user: {username}")
+    
+    # Send notifications
+    send_notifications(urls_to_notify, message, doc.name)
+
+    
+def get_task_assignees(task_name):
+    """Get list of usernames assigned to the task."""
     allocated_users = frappe.get_all(
         "ToDo",
-        filters={"reference_type": "Task", "reference_name": doc.name},
+        filters={
+            "reference_type": "Task",
+            "reference_name": task_name,
+            "status": "Open"
+        },
         fields=["allocated_to"]
     )
     
-    employee_names = []
-    if allocated_users:
-        for row in allocated_users:
-            full_name = frappe.db.get_value("User", row.allocated_to, "full_name")
-            if full_name:
-                employee_names.append(full_name)
-        
-        if employee_names:
-            message += f"\nAssigned to: *{', '.join(employee_names)}*"
+    assignees = []
+    for row in allocated_users:
+        username = frappe.db.get_value("User", row.allocated_to, "username")
+        if username:
+            assignees.append(username)
+    
+    return assignees
+
+
+def get_project_subscribers(project_name):
+    """Get list of usernames subscribed to project notifications."""
+    subscriber_rows = frappe.get_all(
+        "Portal User",
+        filters={
+            "parent": project_name,
+            "parenttype": "Project",
+            "parentfield": "custom_notification"
+        },
+        fields=["user"]
+    )
+    
+    subscribers = []
+    for row in subscriber_rows:
+        if row.user:
+            username = frappe.db.get_value("User", row.user, "username")
+            if username:
+                subscribers.append(username)
+    
+    return subscribers
+
+
+def get_recipients(status_config, assignees, subscribers):
+    """Determine notification recipients based on status configuration."""
+    recipients = set()
+    
+    # Add subscribers if configured
+    if status_config.get("notify_subscribers", False):
+        recipients.update(subscribers)
+    
+    # Add assignees if configured
+    if status_config.get("notify_assignees", False):
+        recipients.update(assignees)
+    
+    return list(recipients)
+
+
+def build_message(doc, assignees):
+    """Build the notification message."""
+    message = f"Task `{doc.subject}` is now *{doc.status}*"
+    
+    if doc.project:
+        project_name = frappe.db.get_value("Project", doc.project, "project_name")
+        if project_name:
+            message += f"\nProject: {project_name}"
     
     if doc.type:
         message += f"\nType: {doc.type}"
-
+    
     if doc.exp_end_date:
         message += f"\nDue: {doc.exp_end_date}"
+
+    if assignees:
+        message += f"\nAssigned to: *{', '.join(assignees)}*"
+        if doc.expected_time:
+            message += f"\nExpected Time: {doc.expected_time} hours"
     
-    # Collect all webhook URLs to notify
-    urls_to_notify = []
+    return message
+
+
+def send_notifications(urls, message, task_name):
+    """Send notifications to all webhook URLs."""
+    if not urls:
+        return
     
-    # Notify assigned users if configured
-    if status_config.get("notify_assigned", False):
-        for name in employee_names:
-            if name in employees:
-                urls_to_notify.append(base_url + employees[name])
-            else:
-                frappe.logger().warning(f"Can't find {name}'s Synology Chat token in config")
-    
-    # Notify groups if configured
-    # for group_name in status_config.get("notify_groups", []):
-    #     if group_name in groups:
-    #         urls_to_notify.append(base_url + groups[group_name])
-    #     else:
-    #         frappe.logger().warning(f"Can't find group '{group_name}' in Synology Chat config")
-    
-    # Send notifications
     payload_data = json.dumps({"text": message})
     
-    for webhook_url in urls_to_notify:
+    for webhook_url in urls:
         try:
             response = requests.post(
                 webhook_url,
@@ -84,7 +150,6 @@ def notify_task_update(doc, method):
             )
             response.raise_for_status()
         except Exception as e:
-            frappe.logger().error(f"Synology webhook failed for Task {doc.name}: {e}")
+            frappe.logger().error(f"Synology webhook failed for Task {task_name}: {e}")
     
-    if urls_to_notify:
-        frappe.logger().info(f"Synology notifications sent for Task {doc.name} ({len(urls_to_notify)} recipients)")
+    frappe.logger().info(f"Synology notifications sent for Task {task_name} ({len(urls)} recipients)")

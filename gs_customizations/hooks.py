@@ -56,7 +56,7 @@ boot_session = "gs_customizations.boot.boot_session"
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
 web_include_css = [
-    "/assets/gs_customizations/css/login_slideshow.css"
+    "/assets/gs_customizations/css/login_slideshow.css?v=2"
 ]
 
 web_include_js = [
@@ -64,17 +64,22 @@ web_include_js = [
 ]
 
 app_include_css = [
-    "/assets/gs_customizations/css/kanban.css",
-    "/assets/gs_customizations/css/kanban_inline_edit.css",
-    "/assets/gs_customizations/css/kanban_collapsible.css",
+    "/assets/gs_customizations/css/kanban.css?v=17",
+    "/assets/gs_customizations/css/kanban_inline_edit.css?v=13",
+    # "/assets/gs_customizations/css/kanban_collapsible.css",
 ]
 
 app_include_js = [
-    "/assets/gs_customizations/js/kanban.js",
-    "/assets/gs_customizations/js/kanban_inline_edit.js",
-    "/assets/gs_customizations/js/kanban_collapsible.js",
+    # "/assets/gs_customizations/js/kanban.js",
+    # "/assets/gs_customizations/js/kanban_inline_edit.js",
+    # "/assets/gs_customizations/js/kanban_collapsible.js",
+    # "/assets/gs_customizations/js/kanban_filters.js",
 
-    "/assets/gs_customizations/js/kanban_filters.js",
+    "/assets/gs_customizations/js/kanban_customizations.js?v=31",
+    "/assets/gs_customizations/js/kanban_optimizations.js?v=13",
+    "/assets/gs_customizations/js/list_view_customizations.js?v=02",
+
+    "/assets/gs_customizations/js/hrms/monthly_attendance_sheet/monthly_attendance_sheet.js?v=02",
 
     # "/assets/gs_customizations/js/global_overrides.js",
 ]
@@ -84,10 +89,13 @@ doctype_js = {
     "Leave Allocation": "overrides/hrms/leave_allocation/leave_allocation.js",
 
     "Task": "overrides/erpnext/task/task.js",
-    "Workspace": "overrides/frappe/workspace/workspace.js"
+    "Timesheet": "overrides/erpnext/timesheet/timesheet.js",
+    # Current not working
+    # "Workspace": "overrides/frappe/workspace/workspace.js"
 }
 
 doctype_list_js = {
+    "Attendance": "overrides/hrms/attendance/attendance_list.js",
     "Task": "overrides/erpnext/task/task_list.js"
 }
 
@@ -188,12 +196,15 @@ permission_query_conditions = {
 # }
 
 override_doctype_class = {
+    "Attendance": "gs_customizations.overrides.hrms.attendance.attendance.CustomAttendance",
+    "Shift Type": "gs_customizations.overrides.hrms.shift_type.shift_type.CustomShiftType",
     "Leave Application": "gs_customizations.overrides.hrms.leave_application.leave_application.CustomLeaveApplication",
     "Leave Allocation": "gs_customizations.overrides.hrms.leave_allocation.leave_allocation.CustomLeaveAllocation",
     "Leave Ledger Entry": "gs_customizations.overrides.hrms.leave_ledger_entry.leave_ledger_entry.CustomLeaveLedgerEntry",
     "Leave Policy Assignment": "gs_customizations.overrides.hrms.leave_policy_assignment.leave_policy_assignment.CustomLeavePolicyAssignment",
 
-    # "Task": "gs_customizations.overrides.erpnext.task.task.CustomTask",
+    "Task": "gs_customizations.overrides.erpnext.task.task.CustomTask",
+    "Notification Log": "gs_customizations.overrides.frappe.notification_log.notification_log.CustomNotificationLog",
 }
 
 # Document Events
@@ -218,13 +229,14 @@ doc_events = {
     "Task": {
         "before_load": "gs_customizations.utils.network_access.check_doctype_access",
         "before_insert": "gs_customizations.utils.network_access.check_doctype_access",
-        "validate": "gs_customizations.overrides.erpnext.task.task.validate",
+        "validate": "gs_customizations.overrides.erpnext.task.task.custom_validate",
         "on_change": "gs_customizations.overrides.erpnext.task.task.on_change",
         "on_update": "gs_customizations.synology.synology.notify_task_update",
     },
     # Currently not working for some reason
     "Kanban Board": {
-        "after_insert": "gs_customizations.overrides.frappe.kanban_board.kanban_board.set_default_colors"
+        "before_insert": "gs_customizations.overrides.frappe.kanban_board.kanban_board.set_default_indicators",
+        "validate": "gs_customizations.overrides.frappe.kanban_board.kanban_board.set_default_indicators", 
     },
     # Currently not working for some reason
     "Workspace": {
@@ -255,6 +267,12 @@ doc_events = {
 # 	],
 # }
 
+scheduler_events = {
+	"daily_long": [
+		"gs_customizations.utils.hrms.allocate_earned_leaves",
+	],
+}
+
 # Testing
 # -------
 
@@ -280,6 +298,8 @@ override_whitelisted_methods = {
     "frappe.desk.doctype.kanban_board.kanban_board.update_order": "gs_customizations.overrides.frappe.kanban_board.kanban_board.update_order",
     "frappe.desk.doctype.kanban_board.kanban_board.update_order_for_single_card": "gs_customizations.overrides.frappe.kanban_board.kanban_board.update_order_for_single_card",
     "frappe.desk.doctype.kanban_board.kanban_board.add_card": "gs_customizations.overrides.frappe.kanban_board.kanban_board.add_card",
+
+    # "erpnext.projects.doctype.task.task.make_timesheet": "gs_customizations.overrides.erpnext.task.task.make_timesheet",
 }
 
 # exempt linked doctypes from being automatically cancelled

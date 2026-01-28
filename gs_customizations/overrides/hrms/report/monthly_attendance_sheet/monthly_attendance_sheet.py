@@ -1,0 +1,525 @@
+import frappe
+from frappe import _
+from frappe.query_builder import Case
+from frappe.query_builder.functions import Count, Extract, Sum
+from frappe.utils import cint, cstr, formatdate, getdate
+from frappe.utils.nestedset import get_descendants_of
+
+from hrms.utils import date_diff, get_date_range
+
+from hrms.hr.report.monthly_attendance_sheet import (
+	monthly_attendance_sheet
+)
+
+from hrms.hr.report.monthly_attendance_sheet.monthly_attendance_sheet import (
+	get_date_condition,
+	get_dates_in_period,
+	get_columns_for_leave_types,
+	get_columns_for_days,
+	get_entry_exits_summary,
+	get_holiday_status,
+)
+
+Filters = frappe._dict
+
+status_map = {
+    "Present": "P",
+    "Absent": "A",
+    "Hours Leave (Paid)/Absent": "HLP/A",
+    "Hours Leave (Unpaid)/Absent": "HLU/A",
+    "Hours Leave (Paid)/Present": "HLP/P",
+    "Hours Leave (Unpaid)/Present": "HLU/P",
+    "Work From Home": "WFH",
+    "On Leave (Paid)": "LP",
+    "On Leave (Unpaid)": "LU",
+    "Holiday": "H",
+    "Weekly Off": "WO",
+}
+
+day_abbr = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+def apply_monthly_attendance_sheet_overrides():
+	"""Monkey patch the report functions"""
+	monthly_attendance_sheet.get_message = get_message
+	monthly_attendance_sheet.get_columns = get_columns
+	monthly_attendance_sheet.get_attendance_records = get_attendance_records
+	monthly_attendance_sheet.get_rows = get_rows
+	monthly_attendance_sheet.get_attendance_status_for_summarized_view = get_attendance_status_for_summarized_view
+	monthly_attendance_sheet.get_attendance_status_for_detailed_view = get_attendance_status_for_detailed_view
+	monthly_attendance_sheet.get_leave_summary = get_leave_summary
+	monthly_attendance_sheet.get_chart_data = get_chart_data
+
+
+def get_message() -> str:
+	message = ""
+	colors = [
+		"green",      # Present - P
+		"red",        # Absent - A
+		"orange",     # HLP/A
+		"orange",     # HLU/A
+		"#914EE3",    # HLP/P
+		"#914EE3",    # HLU/P
+		"green",      # WFH
+		"#318AD8",    # LP
+		"#318AD8",    # LU
+		"#878787",    # H
+		"#878787",    # WO
+	]
+
+	count = 0
+	for status, abbr in status_map.items():
+		message += f"""
+			<span style='border-left: 2px solid {colors[count]}; padding-right: 12px; padding-left: 5px; margin-right: 3px;'>
+				{_(status)} - {abbr}
+			</span>
+		"""
+		count += 1
+
+	return message
+
+def get_columns(filters: Filters) -> list[dict]:
+	columns = []
+
+	if filters.group_by:
+		options_mapping = {
+			"Branch": "Branch",
+			"Grade": "Employee Grade",
+			"Department": "Department",
+			"Designation": "Designation",
+		}
+		options = options_mapping.get(filters.group_by)
+		columns.append(
+			{
+				"label": _(filters.group_by),
+				"fieldname": frappe.scrub(filters.group_by),
+				"fieldtype": "Link",
+				"options": options,
+				"width": 120,
+			}
+		)
+
+	columns.extend(
+		[
+			{
+				"label": _("Employee"),
+				"fieldname": "employee",
+				"fieldtype": "Link",
+				"options": "Employee",
+				"width": 155,
+			},
+			{"label": _("Employee Name"), "fieldname": "employee_name", "fieldtype": "Data", "width": 120},
+		]
+	)
+
+	if filters.summarized_view:
+		columns.extend(
+			[
+				{
+					"label": _("Total Present"),
+					"fieldname": "total_present",
+					"fieldtype": "Float",
+					"width": 110,
+				},
+				{
+					"label": _("Total Leaves"),
+					"fieldname": "total_leaves",
+					"fieldtype": "Float",
+					"width": 110
+				},
+				{
+					"label": _("Total Absent"),
+					"fieldname": "total_absent",
+					"fieldtype": "Float",
+					"width": 110
+				},
+				{
+					"label": _("Total Holidays"),
+					"fieldname": "total_holidays",
+					"fieldtype": "Float",
+					"width": 120,
+				},
+				{
+					"label": _("Unmarked Days"),
+					"fieldname": "unmarked_days",
+					"fieldtype": "Float",
+					"width": 130,
+				},
+				{
+					"label": _("Insufficient Hours"),
+					"fieldname": "insufficient_hours",
+					"fieldtype": "Float",
+					"width": 140,
+				}
+			]
+		)
+		columns.extend(get_columns_for_leave_types())
+		columns.extend(
+			[
+				{
+					"label": _("Total Paid"),
+					"fieldname": "total_paid",
+					"fieldtype": "Float",
+					"width": 110
+				},
+				{
+					"label": _("Total Late Entries"),
+					"fieldname": "total_late_entries",
+					"fieldtype": "Float",
+					"width": 140,
+				},
+				{
+					"label": _("Total Early Exits"),
+					"fieldname": "total_early_exits",
+					"fieldtype": "Float",
+					"width": 140,
+				},
+			]
+		)
+	else:
+		columns.append({"label": _("Shift"), "fieldname": "shift", "fieldtype": "Data", "width": 100})
+		columns.extend(get_columns_for_days(filters))
+
+	return columns
+
+def get_attendance_records(filters: Filters) -> list[dict]:
+	Attendance = frappe.qb.DocType("Attendance")
+	attendance_date_condition = get_date_condition(Attendance.attendance_date, filters)
+	status = (
+		frappe.qb.terms.Case()
+		# Hours Leave (Paid) + Present
+		.when(
+			((Attendance.status == "Hours Leave") & (Attendance.half_day_status == "Present") & (Attendance.leave_type == "Paid Time Off")),
+			"Hours Leave (Paid)/Present",
+		)
+		# Hours Leave (Unpaid) + Present
+		.when(
+			((Attendance.status == "Hours Leave") & (Attendance.half_day_status == "Present") & (Attendance.leave_type == "Unpaid Time Off")),
+			"Hours Leave (Unpaid)/Present",
+		)
+		# Hours Leave (Paid) + Absent
+		.when(
+			((Attendance.status == "Hours Leave") & (Attendance.half_day_status == "Absent") & (Attendance.leave_type == "Paid Time Off")),
+			"Hours Leave (Paid)/Absent",
+		)
+		# Hours Leave (Unpaid) + Absent
+		.when(
+			((Attendance.status == "Hours Leave") & (Attendance.half_day_status == "Absent") & (Attendance.leave_type == "Unpaid Time Off")),
+			"Hours Leave (Unpaid)/Absent",
+		)
+		# On Leave (Paid)
+		.when(
+			((Attendance.status == "On Leave") & (Attendance.leave_type == "Paid Time Off")),
+			"On Leave (Paid)",
+		)
+		# On Leave (Unpaid)
+		.when(
+			((Attendance.status == "On Leave") & (Attendance.leave_type == "Unpaid Time Off")),
+			"On Leave (Unpaid)",
+		)
+		.else_(Attendance.status)
+	)
+	query = (
+		frappe.qb.from_(Attendance)
+		.select(
+			Attendance.employee,
+			Attendance.attendance_date,
+			(status).as_("status"),
+			Attendance.shift,
+		)
+		.where(
+			(Attendance.docstatus == 1)
+			& (Attendance.company.isin(filters.companies))
+			& (attendance_date_condition)
+		)
+	)
+
+	if filters.employee:
+		query = query.where(Attendance.employee == filters.employee)
+	query = query.orderby(Attendance.employee, Attendance.attendance_date)
+
+	return query.run(as_dict=1)
+
+def get_rows(employee_details: dict, filters: Filters, holiday_map: dict, attendance_map: dict) -> list[dict]:
+	records = []
+	default_holiday_list = frappe.get_cached_value("Company", filters.company, "default_holiday_list")
+
+	for employee, details in employee_details.items():
+		emp_holiday_list = details.holiday_list or default_holiday_list
+		holidays = holiday_map.get(emp_holiday_list)
+
+		if filters.summarized_view:
+			attendance = get_attendance_status_for_summarized_view(
+				employee, filters, holidays, details.joined_in_current_period, details.joined_date
+			)
+			if not attendance:
+				continue
+
+			leave_summary = get_leave_summary(employee, filters)
+			entry_exits_summary = get_entry_exits_summary(employee, filters)
+			insufficient_hours_summary = get_insufficient_hours_count(employee, filters)
+
+			row = {"employee": employee, "employee_name": details.employee_name}
+			set_defaults_for_summarized_view(filters, row)
+			row.update(attendance)
+			row.update(leave_summary)
+			row.update(entry_exits_summary)
+			row.update(insufficient_hours_summary)
+			
+			# Calculate total_paid: total_present + Paid Time Off leave days
+			total_present = row.get("total_present", 0.0)
+			paid_time_off = row.get("paid_time_off", 0.0)
+			total_holidays = row.get("total_holidays", 0.0)
+			row["total_paid"] = total_present + paid_time_off + total_holidays
+
+			records.append(row)
+		else:
+			employee_attendance = attendance_map.get(employee)
+			if not employee_attendance:
+				continue
+
+			attendance_for_employee = get_attendance_status_for_detailed_view(
+				employee, filters, employee_attendance, holidays
+			)
+			# set employee details in the first row
+			for record in attendance_for_employee:
+				record.update({"employee": employee, "employee_name": details.employee_name})
+
+			records.extend(attendance_for_employee)
+
+	return records
+
+
+def set_defaults_for_summarized_view(filters, row):
+	for entry in get_columns(filters):
+		if entry.get("fieldtype") == "Float":
+			row[entry.get("fieldname")] = 0.0
+
+def get_attendance_status_for_summarized_view(
+	employee: str, filters: Filters, holidays: list, joined_in_current_period: int, joined_date: int
+) -> dict:
+	"""Returns dict of attendance status for employee like
+	{'total_present': 1.5, 'total_leaves': 0.5, 'total_absent': 13.5, 'total_holidays': 8, 'unmarked_days': 5}
+	"""
+	summary, attendance_days = get_attendance_summary_and_days(employee, filters)
+	if not any(summary.values()):
+		return {}
+	
+	# Use flt() to safely convert None to 0.0 and ensure float arithmetic
+	total_hours_leave = summary.total_hours_leave / 3600.0 / 8.0
+	
+	total_days = get_dates_in_period(filters)
+	total_holidays = total_unmarked_days = 0
+	
+	for d in total_days:
+		d = getdate(d)
+		if d.day in attendance_days or (joined_in_current_period and d < joined_date):
+			continue
+		status = get_holiday_status(d, holidays)
+		if status in ["Weekly Off", "Holiday"]:
+			total_holidays += 1
+		elif not status:
+			total_unmarked_days += 1
+	
+	return {
+		"total_present": summary.total_present + (summary.total_hours_leave_count - total_hours_leave),
+		"total_leaves": summary.total_leaves + total_hours_leave,
+		"total_absent": summary.total_absent,
+		"total_holidays": total_holidays,
+		"unmarked_days": total_unmarked_days,
+	}
+
+def get_attendance_summary_and_days(employee: str, filters: Filters) -> tuple[dict, list]:
+	Attendance = frappe.qb.DocType("Attendance")
+
+	present_case = (
+		frappe.qb.terms.Case()
+		.when(((Attendance.status == "Present") | (Attendance.status == "Work From Home")), 1)
+		.else_(0)
+	)
+	sum_present = Sum(present_case).as_("total_present")
+
+	absent_case = frappe.qb.terms.Case().when(Attendance.status == "Absent", 1).else_(0)
+	sum_absent = Sum(absent_case).as_("total_absent")
+
+	leave_case = frappe.qb.terms.Case().when(Attendance.status == "On Leave", 1).else_(0)
+	sum_leave = Sum(leave_case).as_("total_leaves")
+
+	# Count of Hours Leave days
+	hours_leave_count_case = frappe.qb.terms.Case().when(Attendance.status == "Hours Leave", 1).else_(0)
+	sum_hours_leave_count = Sum(hours_leave_count_case).as_("total_hours_leave_count")
+
+	hours_leave_case = frappe.qb.terms.Case().when(Attendance.status == "Hours Leave", Attendance.custom_total_leave_time).else_(0)
+	sum_hours_leave = Sum(hours_leave_case).as_("total_hours_leave")
+
+	attendance_date_condition = get_date_condition(Attendance.attendance_date, filters)
+
+	summary = (
+		frappe.qb.from_(Attendance)
+		.select(
+			sum_present,
+			sum_absent,
+			sum_leave,
+			sum_hours_leave_count,
+			sum_hours_leave, # modified
+		)
+		.where(
+			(Attendance.docstatus == 1)
+			& (Attendance.employee == employee)
+			& (Attendance.company.isin(filters.companies))
+			& (attendance_date_condition)
+		)
+	).run(as_dict=True)
+
+	days = (
+		frappe.qb.from_(Attendance)
+		.select(Extract("day", Attendance.attendance_date).as_("day_of_month"))
+		.distinct()
+		.where(
+			(Attendance.docstatus == 1)
+			& (Attendance.employee == employee)
+			& (Attendance.company.isin(filters.companies))
+			& (attendance_date_condition)
+		)
+	).run(pluck=True)
+
+	return summary[0], days
+
+def get_attendance_status_for_detailed_view(
+	employee: str, filters: Filters, employee_attendance: dict, holidays: list
+) -> list[dict]:
+	"""Returns list of shift-wise attendance status for employee
+	[
+	        {'shift': 'Morning Shift', 1: 'A', 2: 'P', 3: 'A'....},
+	        {'shift': 'Evening Shift', 1: 'P', 2: 'A', 3: 'P'....}
+	]
+	"""
+	total_days = get_dates_in_period(filters)
+	attendance_values = []
+
+	for shift, status_dict in employee_attendance.items():
+		row = {"shift": shift}
+		"""{
+	            'Morning Shift': {1: 'Present', 2: 'Absent', ...}
+	            'Evening Shift': {1: 'Absent', 2: 'Present', ...}
+	    },"""
+		for d in total_days:
+			d = getdate(d)
+
+			status = status_dict.get(d)
+
+			if status is None and holidays:
+				status = get_holiday_status(d, holidays)
+
+			abbr = status_map.get(status, "")
+			row[d.strftime("%d-%m-%Y")] = abbr
+
+		attendance_values.append(row)
+
+	return attendance_values
+
+def get_leave_summary(employee: str, filters: Filters) -> dict[str, float]:
+	"""Returns a dict of leave type and corresponding leaves taken by employee like:
+	{'leave_without_pay': 1.0, 'sick_leave': 2.0}
+	"""
+	Attendance = frappe.qb.DocType("Attendance")
+	day_case = frappe.qb.terms.Case().when(Attendance.status == "Hours Leave", Attendance.custom_total_leave_time / 3600.0 / 8.0).else_(1)
+	sum_leave_days = Sum(day_case).as_("leave_days")
+
+	attendance_date_condition = get_date_condition(Attendance.attendance_date, filters)
+
+	leave_details = (
+		frappe.qb.from_(Attendance)
+		.select(Attendance.leave_type, sum_leave_days)
+		.where(
+			(Attendance.employee == employee)
+			& (Attendance.docstatus == 1)
+			& (Attendance.company.isin(filters.companies))
+			& ((Attendance.leave_type.isnotnull()) | (Attendance.leave_type != ""))
+			& (attendance_date_condition)
+		)
+		.groupby(Attendance.leave_type)
+	).run(as_dict=True)
+
+	leaves = {}
+	for d in leave_details:
+		leave_type = frappe.scrub(d.leave_type)
+		leaves[leave_type] = d.leave_days
+
+	return leaves
+
+def get_insufficient_hours_count(employee: str, filters: Filters) -> dict:
+    """Returns count of attendance records where employee worked less than 8 hours
+    {'insufficient_hours': 5}
+    """
+    Attendance = frappe.qb.DocType("Attendance")
+    
+    attendance_date_condition = get_date_condition(Attendance.attendance_date, filters)
+    
+    insufficient_count = (
+        frappe.qb.from_(Attendance)
+        .select(Count("*").as_("insufficient_hours"))
+        .where(
+            (Attendance.docstatus == 1)
+            & (Attendance.employee == employee)
+            & (Attendance.company.isin(filters.companies))
+            & (attendance_date_condition)
+            & ((Attendance.status == "Present") | (Attendance.status == "Work From Home"))
+			& (Attendance.working_hours > 1)
+            & (Attendance.working_hours < 8)
+        )
+    ).run(as_dict=True)
+    
+    return insufficient_count[0] if insufficient_count else {"insufficient_hours": 0}
+
+def get_chart_data(attendance_map: dict, filters: Filters) -> dict:
+	days = get_columns_for_days(filters)
+	labels = []
+	absent = []
+	present = []
+	leave = []
+
+	for day in days:
+		labels.append(day["label"])
+		total_absent_on_day = total_leaves_on_day = total_present_on_day = 0
+
+		for __, attendance_dict in attendance_map.items():
+			for __, attendance in attendance_dict.items():
+				attendance_on_day = attendance.get(getdate(day["fieldname"], parse_day_first=True))
+
+				if attendance_on_day in ["On Leave (Paid)", "On Leave (Unpaid)"]:
+					# leave should be counted only once for the entire day
+					total_leaves_on_day += 1
+					break
+				elif attendance_on_day == "Absent":
+					total_absent_on_day += 1
+				elif attendance_on_day in ["Present", "Work From Home"]:
+					total_present_on_day += 1
+				elif attendance_on_day in [
+					"Hours Leave (Paid)/Present",
+					"Hours Leave (Unpaid)/Present",
+				]:
+					total_present_on_day += 0.5
+					total_leaves_on_day += 0.5
+				elif attendance_on_day in [
+					"Hours Leave (Paid)/Other Half Absent",
+					"Hours Leave (Unpaid)/Other Half Absent",
+				]:
+					total_absent_on_day += 0.5
+					total_leaves_on_day += 0.5
+
+		absent.append(total_absent_on_day)
+		present.append(total_present_on_day)
+		leave.append(total_leaves_on_day)
+
+	return {
+		"data": {
+			"labels": labels,
+			"datasets": [
+				{"name": _("Absent"), "values": absent},
+				{"name": _("Present"), "values": present},
+				{"name": _("Leave"), "values": leave},
+			],
+		},
+		"type": "line",
+		"colors": ["red", "green", "blue"],
+	}

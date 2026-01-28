@@ -12,11 +12,6 @@ frappe.listview_settings["Task"] = {
 	onload: function (listview) {
 		var method = "erpnext.projects.doctype.task.task.set_multiple_status";
 
-        // setTimeout(() => {
-        //     listview.filter_area.clear();
-        //     listview.refresh();
-        // }, 50);
-
 		listview.page.add_menu_item(__("Set as Open"), function () {
 			listview.call_for_selected_items(method, { status: "Open" });
 		});
@@ -27,16 +22,18 @@ frappe.listview_settings["Task"] = {
 	},
 	get_indicator: function (doc) {
 		var colors = {
-			Open: "dark green",
+			Open: "cyan",
 			Working: "blue",
 			"QA Pending": "purple",
-            "QA Reviewing": "dark pink",
+            "QA Reviewing": "pink",
             "QA Feedback": "yellow",
-            "Delivered": "orange",
+			"QA Approved": "green",
+            "Delivered": "cyan",
             "Client Feedback": "yellow",
 			Overdue: "red",
 			Completed: "green",
-			Cancelled: "dark grey",
+			Cancelled: "cyan",
+			Closed: "orange",
 			Template: "blue",
 		};
 		return [__(doc.status), colors[doc.status], "status,=," + doc.status];
@@ -62,10 +59,7 @@ frappe.listview_settings["Task"] = {
 			<span class="text-white">${ganttobj.progress}%</span>
 		</p>`;
 
-        const targeted_roles = ["GS - Projects User", "Projects User"];
-        const filter_assignment = targeted_roles.some(role => frappe.user.has_role(role));
-
-		if (filter_assignment && task._assign) {
+		if (task._assign) {
 			const assign_list = JSON.parse(task._assign);
 			const assignment_wrapper = `
 				<span>Assigned to:</span>

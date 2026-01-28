@@ -59,6 +59,14 @@ frappe.ui.form.on("Leave Application", {
 	// reference only
 	leave_type: function (frm) {
 		frm.trigger("get_leave_balance");
+
+		if (!frm.doc.custom_use_single_date && frm.doc.from_date) {
+			frm.trigger("calculate_total_days");
+		}
+
+		if (frm.doc.custom_use_single_date && frm.doc.custom_from_time) {
+			frm.trigger("calculate_total_time");
+		}
 	},
 
 	from_date: function (frm) {

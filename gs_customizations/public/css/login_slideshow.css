@@ -1,7 +1,6 @@
 /* Prevent scrolling beyond viewport */
 html, body {
     height: 100%;
-    overflow: hidden;
 }
 
 #page-login {

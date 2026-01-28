@@ -13,6 +13,11 @@
     user-select: none;
 }
 
+.kanban-board,
+.kanban-wrapper {
+    zoom: 80%;
+}
+
 
 /* ========================================
    KANBAN COLUMN SCROLLBAR
@@ -33,10 +38,148 @@
 }
 
 .kanban .kanban-column .kanban-cards::-webkit-scrollbar-thumb {
-    background: var(--gray-400);
+    background: var(--gray-200);
     border-radius: 2px;
 }
 
 .kanban .kanban-column .kanban-cards::-webkit-scrollbar-thumb:hover {
-    background: var(--gray-500);
+    background: var(--gray-400);
+}
+
+/* ========================================
+   KANBAN HORIZONTAL SCROLLBAR
+   ======================================== */
+/* Lock the page body to viewport */
+/* Scope everything to Task Kanban view only */
+[data-page-route^="List/Task/Kanban"] .page-body.full-width,
+.page-body.full-width:has([data-page-route^="List/Task/Kanban"]) {
+    max-width: 100vw !important;
+    overflow-x: clip !important;
+}
+
+[data-page-route^="List/Task/Kanban"] .page-content {
+    max-width: 100% !important;
+    overflow-x: clip !important;
+}
+
+[data-page-route^="List/Task/Kanban"] .layout-main {
+    max-width: 100% !important;
+    overflow-x: clip !important;
+}
+
+[data-page-route^="List/Task/Kanban"] .layout-main-section-wrapper {
+    max-width: calc(100vw - 50px) !important;
+    overflow-x: clip !important;
+}
+
+[data-page-route^="List/Task/Kanban"] .layout-main-section {
+    max-width: 100% !important;
+    overflow-x: clip !important;
+}
+
+[data-page-route^="List/Task/Kanban"] .frappe-list {
+    max-width: 100% !important;
+    overflow-x: clip !important;
+}
+
+[data-page-route^="List/Task/Kanban"] .frappe-list .result {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    padding-bottom: 16px;
+    cursor: grab;
+}
+
+[data-page-route^="List/Task/Kanban"] .frappe-list .result:active {
+    cursor: grabbing;
+}
+
+[data-page-route^="List/Task/Kanban"] .kanban {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    min-width: max-content !important;
+}
+
+[data-page-route^="List/Task/Kanban"] .kanban-column {
+    flex: 0 0 300px !important;
+    min-width: 300px !important;
+    max-width: 300px !important;
+}
+
+/* ========================================
+   KANBAN COLLAPSIBLE
+   ======================================== */
+
+.kanban-card {
+    position: relative;
+}
+
+/* Collapsed state - hide all children by default */
+.kanban-card .kanban-card-doc > div {
+    display: none !important;
+}
+
+/* Collapsed state - show only Task Type field */
+.kanban-card .kanban-card-doc > div:has(a[data-doctype="Task Type"]) {
+    display: block !important;
+}
+
+/* Expanded state - show all children */
+.kanban-card.expanded .kanban-card-doc > div {
+    display: block !important;
+}
+
+/* Toggle button */
+.kanban-toggle-btn {
+    position: absolute;
+    top: 6px;
+    right: 12px;
+    background: var(--bg-light-gray);
+    border: none;
+    border-radius: 3px;
+    padding: 2px 4px;
+    cursor: pointer;
+    opacity: 0.5;
+    z-index: 5;
+    transition: opacity 0.15s ease;
+}
+
+.kanban-toggle-btn:hover {
+    opacity: 1;
+}
+
+/* ========================================
+   KANBAN ASSIGNMENT
+   ======================================== */
+
+.kanban-assignee-names {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+}
+
+.kanban-assignee-tag {
+    background-color: var(--bg-light-gray);
+    color: var(--text-color);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    white-space: nowrap;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    line-height: 1.4;
+}
+
+/* Keep add button aligned */
+.kanban-assignments .avatar-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.kanban-assignments .avatar-group .avatar-action {
+    cursor: pointer;
 }
