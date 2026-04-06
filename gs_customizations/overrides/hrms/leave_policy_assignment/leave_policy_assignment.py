@@ -108,6 +108,8 @@ class CustomLeavePolicyAssignment(LeavePolicyAssignment):
 		):
 			custom_new_time_leaves_allocated = annual_allocation
 
+		custom_new_time_leaves_allocated = round(custom_new_time_leaves_allocated / 3600) * 3600
+
 		return flt(custom_new_time_leaves_allocated)
 	
 	def get_leaves_for_passed_period(self, annual_allocation, leave_details, date_of_joining):

@@ -1,4 +1,5 @@
 import frappe
+from frappe import _, qb
 
 from hrms.hr.utils import (
     get_earned_leaves,
@@ -33,9 +34,17 @@ def allocate_earned_leaves():
 	e_leave_types = get_earned_leaves()
 	today = frappe.flags.current_date or getdate()
 
+	# TEST: Filter for specific employee only
+	target_user_id = "sonnynguyen.150801@gmail.com"
+
 	for e_leave_type in e_leave_types:
 		leave_allocations = get_leave_allocations(today, e_leave_type.name)
 		for allocation in leave_allocations:
+			# Skip if not target employee
+			# employee_user_id = frappe.db.get_value("Employee", allocation.employee, "user_id")
+			# if employee_user_id == target_user_id:
+			# 	continue
+
 			if not allocation.leave_policy_assignment and not allocation.leave_policy:
 				continue
 
@@ -98,9 +107,9 @@ def update_previous_leave_allocation(allocation, annual_allocation, e_leave_type
 
 		if e_leave_type.allocate_on_day:
 			text = _(
-				"Allocated {0} leave(s) via scheduler on {1} based on the 'Allocate on Day' option set to {2}"
+				"Allocated {0} hour leaves via scheduler on {1} based on the 'Allocate on Day' option set to {2}"
 			).format(
-				frappe.bold(earned_leaves), frappe.bold(formatdate(today_date)), e_leave_type.allocate_on_day
+				frappe.bold(earned_leaves/3600), frappe.bold(formatdate(today_date)), e_leave_type.allocate_on_day
 			)
 
 		allocation.add_comment(comment_type="Info", text=text)

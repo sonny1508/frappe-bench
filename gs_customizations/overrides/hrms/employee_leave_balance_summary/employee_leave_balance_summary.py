@@ -1,7 +1,10 @@
 import frappe
 from frappe import _
 
-from gs_customizations.overrides.hrms.leave_application.leave_application import get_leave_details
+from gs_customizations.overrides.hrms.leave_application.leave_application import (
+    get_leave_details,
+	get_leaves_for_period
+)
 
 from hrms.hr.report.employee_leave_balance_summary import (
 	employee_leave_balance_summary,
@@ -33,7 +36,14 @@ def get_data(filters, leave_types):
 			if leave_type in available_leave["leave_allocation"]:
 				# opening balance
 				remaining = available_leave["leave_allocation"][leave_type]["remaining_leaves"]
-
+			# elif leave_type in available_leave["lwps"]:
+			# 	# LWP has no allocation; show leaves taken as a negative number
+			# 	leaves_taken = get_leaves_for_period(
+			# 		employee.name, leave_type,
+			# 		filters.date,
+			# 		filters.date
+			# 	)
+			# 	remaining = leaves_taken * -1 # will naturally be negative
 			row += [remaining]
 
 		data.append(row)

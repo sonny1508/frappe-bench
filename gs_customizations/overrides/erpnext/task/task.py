@@ -1,6 +1,8 @@
 import frappe
 from frappe import _, throw
 
+from frappe.utils import now_datetime
+
 from frappe.desk.form.assign_to import clear, close_all_assignments
 from frappe.model.mapper import get_mapped_doc
 
@@ -23,10 +25,10 @@ class CustomTask(Task):
 			self.status = "Template"
 		if self.status != self.get_db_value("status") and self.status == "Completed":
 			for d in self.depends_on:
-				if frappe.db.get_value("Task", d.task, "status") not in ("Completed", "Cancelled"):
+				if frappe.db.get_value("Task", d.task, "status") not in ("Completed", "Cancelled", "Closed"):
 					frappe.throw(
 						_(
-							"Cannot complete task {0} as its dependant task {1} are not completed / cancelled."
+							"Cannot complete task {0} as its dependant task {1} are not completed / cancelled / closed."
 						).format(frappe.bold(self.name), frappe.bold(d.task))
 					)
 		if self.status != self.get_db_value("status") and self.status == "Closed":
@@ -38,7 +40,7 @@ class CustomTask(Task):
 				if frappe.db.get_value("Task", d.task, "status") not in ("Completed", "Cancelled", "Closed"):
 					frappe.throw(
 						_(
-							"Cannot QA task {0} as its dependant task {1} are not completed / cancelled."
+							"Cannot QA task {0} as its dependant task {1} are not completed / cancelled / closed."
 						).format(frappe.bold(self.name), frappe.bold(d.task))
 					)
 
@@ -47,32 +49,8 @@ class CustomTask(Task):
 		self.check_recursion()
 		self.reschedule_dependent_tasks()
 		self.update_project()
-		self.update_completed_by()
 		self.unassign_todo()
 		self.populate_depends_on()
-
-	def update_completed_by(self):
-		if self.status == "Completed":
-			todo = frappe.db.get_value(
-				"ToDo",
-				{
-					"reference_type": "Task",
-					"reference_name": self.name,
-					"status": ["not in", ["Closed", "Cancelled"]]
-				},
-				"allocated_to"
-			)
-
-			if todo:
-				employee = frappe.db.get_value(
-					"Employee",
-					{"user_id": todo},
-					"name"
-				)
-
-				if employee:
-					self.completed_by = employee
-
 	
 	def unassign_todo(self):
 		if self.status == "Closed":
@@ -94,14 +72,42 @@ def custom_validate(doc, method):
 	auto_update(doc)
 
 def auto_update(doc):
+	auto_update_completed_by(doc)
+	auto_update_completed_on(doc)
+
 	auto_set_task_assign_to_on_todo(doc)
 	auto_set_reviewer_on_qa_reviewing(doc)
 	auto_update_tag_on_status(doc)
 
-
 def on_change(doc, method):
 	set_color_by_priority(doc)
 
+
+def auto_update_completed_by(doc):
+	if doc.status in ["Completed", "Closed"] and not doc.completed_by:
+		todo = frappe.db.get_value(
+			"ToDo",
+			{
+				"reference_type": "Task",
+				"reference_name": doc.name,
+				"status": ["not in", ["Closed", "Cancelled"]]
+			},
+			"allocated_to"
+		)
+
+		if todo:
+			employee = frappe.db.get_value(
+				"Employee",
+				{"user_id": todo},
+				"name"
+			)
+
+			if employee:
+				doc.completed_by = employee
+
+def auto_update_completed_on(doc):
+	if doc.status in ["Completed", "Closed"] and not doc.completed_on:
+		doc.completed_on = now_datetime()
 
 def set_color_by_priority(doc):
 	priority_color_map = {
@@ -189,7 +195,7 @@ def get_changed_fields_from_db(doc, allowed_fields):
 		'expected_time', 'exp_start_date', 'exp_end_date', 'parent_task',
 		'is_group', 'is_template', 'color', 'department', 'company',
 		'completed_by', 'completed_on'
-		'custom_assign_to', 'custom_reviewer',
+		'custom_assign_to_id', 'custom_reviewer',
 		# Add more fields as needed
 	]
 	
@@ -278,7 +284,7 @@ def auto_set_reviewer_on_qa_reviewing(doc):
 	old_status = frappe.db.get_value("Task", doc.name, "status")
 	new_status = doc.status
 
-	target_statuses = ["QA Reviewing", "QA Feedback"]
+	target_statuses = ["QA Reviewing", "QA Feedback", "QA Approved"]
 	
 	# Only when transitioning TO "QA Reviewing" from something else
 	if new_status in target_statuses and old_status != new_status:
@@ -339,3 +345,19 @@ def auto_set_task_assign_to_on_todo(doc):
 	else:
 		doc.custom_assign_to_employee = ""
 		doc.custom_assign_to_id = ""
+
+@frappe.whitelist()
+def get_employee_from_todo(task_name):
+    """Get employee ID from the user assigned in ToDo for this task"""
+    # Get the ToDo linked to this task
+    todo = frappe.db.get_value('ToDo', 
+        {'reference_type': 'Task', 'reference_name': task_name, 'status': 'Open'}, 
+        'allocated_to'
+    )
+    
+    if todo:
+        # Get employee from the user
+        employee = frappe.db.get_value('Employee', {'user_id': todo}, 'name')
+        return employee
+    
+    return None

@@ -282,7 +282,7 @@ class CustomLeaveAllocation(LeaveAllocation):
 			self.db_set("custom_total_time_leaves_allocated", new_total_seconds, update_modified=False)
 
 			date = from_date or frappe.flags.current_date or getdate()
-			create_additional_leave_ledger_entry(self, new_leaves_days, date)
+			create_additional_leave_ledger_entry(self, new_leaves, date)
 
 			hours = flt(new_leaves) / 3600
 			text = _("{0} hours ({1} days) were manually allocated by {2} on {3}").format(

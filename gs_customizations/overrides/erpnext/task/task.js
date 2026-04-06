@@ -1,4 +1,8 @@
 frappe.ui.form.on('Task', {
+    status: function(frm) {
+        update_completed_by_from_assigned_to(frm);
+    },
+
     priority: function(frm) {
         set_color_by_priority(frm);
     },
@@ -12,6 +16,29 @@ frappe.ui.form.on('Task', {
         apply_task_field_permissions(frm);
     }
 });
+
+function update_completed_by_from_assigned_to(frm) {
+    // When status changes to "Completed"
+    if (frm.doc.status === "Completed") {
+        if (!frm.doc_completed_by) {
+            frappe.call({
+                method: 'gs_customizations.overrides.erpnext.task.task.get_employee_from_todo',
+                args: {
+                    task_name: frm.doc.name
+                },
+                callback: function(r) {
+                    if (r.message) {
+                        frm.set_value('completed_by', r.message);
+                    }
+                }
+            });
+        }
+
+        if (!frm.doc.completed_on) {
+            frm.set_value('completed_on', frappe.datetime.now_datetime());
+        }
+    }
+}
 
 function set_color_by_priority(frm) {
     const priority_color_map = {

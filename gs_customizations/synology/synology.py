@@ -3,6 +3,56 @@ import requests
 import json
 
 
+def notify_todo_insert(doc, method):
+    """
+    Send notification when a task is assigned via ToDo creation.
+    Only triggers for newly created assignments (status = Open).
+    """
+    # Only process Task assignments
+    if doc.reference_type != "Task" or doc.status != "Open":
+        return
+    
+    synology_config = frappe.conf.get("synology_chat")
+    if not synology_config:
+        return
+    
+    # Check if "Open" status should notify (when task is first created/assigned)
+    status_notifications = synology_config.get("status_notifications", {})
+    status_config = status_notifications.get("Open")
+    
+    if not status_config or not status_config.get("notify_assignees", False):
+        return
+    
+    # Get the task
+    task = frappe.get_doc("Task", doc.reference_name)
+    
+    # Get all assignees
+    assignees = get_task_assignees(task.name)
+    
+    # Get subscribers
+    subscribers = []
+    if task.project:
+        subscribers = get_project_subscribers(task.project)
+    
+    recipients = get_recipients(status_config, assignees, subscribers)
+    if not recipients:
+        return
+    
+    # Build message
+    message = build_message(task, assignees)
+    
+    # Send notifications
+    base_url = synology_config.get("base_url")
+    employees = synology_config.get("employees", {})
+    
+    urls_to_notify = []
+    for username in recipients:
+        if username in employees:
+            urls_to_notify.append(base_url + employees[username])
+    
+    send_notifications(urls_to_notify, message)
+
+
 def notify_task_update(doc, method):
     """
     Send Synology Chat notifications when Task status changes.
@@ -18,6 +68,11 @@ def notify_task_update(doc, method):
     base_url = synology_config.get("base_url")
     employees = synology_config.get("employees", {})
     status_notifications = synology_config.get("status_notifications", {})
+
+    # Skip if status hasn't actually changed
+    previous = doc.get_doc_before_save()
+    if previous and previous.status == doc.status:
+        return
     
     # Check if this status should trigger notifications
     status_config = status_notifications.get(doc.status)
@@ -50,7 +105,7 @@ def notify_task_update(doc, method):
             frappe.logger().warning(f"No Synology Chat token found for user: {username}")
     
     # Send notifications
-    send_notifications(urls_to_notify, message, doc.name)
+    send_notifications(urls_to_notify, message)
 
     
 def get_task_assignees(task_name):
@@ -134,7 +189,7 @@ def build_message(doc, assignees):
     return message
 
 
-def send_notifications(urls, message, task_name):
+def send_notifications(urls, message):
     """Send notifications to all webhook URLs."""
     if not urls:
         return
@@ -149,7 +204,7 @@ def send_notifications(urls, message, task_name):
                 timeout=5
             )
             response.raise_for_status()
+        except requests.exceptions.HTTPError:
+            frappe.logger().error(f"Synology Chat error: {response.status_code} - {response.text}")
         except Exception as e:
-            frappe.logger().error(f"Synology webhook failed for Task {task_name}: {e}")
-    
-    frappe.logger().info(f"Synology notifications sent for Task {task_name} ({len(urls)} recipients)")
+            frappe.logger().error(f"Failed to send Synology Chat message: {e}")

@@ -79,6 +79,7 @@ app_include_js = [
     "/assets/gs_customizations/js/kanban_optimizations.js?v=13",
     "/assets/gs_customizations/js/list_view_customizations.js?v=02",
 
+    "/assets/gs_customizations/js/erpnext/task/task.js?v=02",
     "/assets/gs_customizations/js/hrms/monthly_attendance_sheet/monthly_attendance_sheet.js?v=02",
 
     # "/assets/gs_customizations/js/global_overrides.js",
@@ -90,6 +91,7 @@ doctype_js = {
 
     "Task": "overrides/erpnext/task/task.js",
     "Timesheet": "overrides/erpnext/timesheet/timesheet.js",
+    # "Timesheet Detail": "overrides/erpnext/timesheet_detail/timesheet_detail.js",
     # Current not working
     # "Workspace": "overrides/frappe/workspace/workspace.js"
 }
@@ -222,6 +224,7 @@ override_doctype_class = {
 doc_events = {
     "ToDo": {
         "before_insert": "gs_customizations.validate.permissions.block_assign",
+        "after_insert": "gs_customizations.synology.synology.notify_todo_insert"
     },
     "Company": {
         "validate": "gs_customizations.overrides.erpnext.company.company.validate"
@@ -232,6 +235,12 @@ doc_events = {
         "validate": "gs_customizations.overrides.erpnext.task.task.custom_validate",
         "on_change": "gs_customizations.overrides.erpnext.task.task.on_change",
         "on_update": "gs_customizations.synology.synology.notify_task_update",
+    },
+    "Timesheet": {
+        "validate": [
+            "gs_customizations.overrides.erpnext.timesheet.timesheet.update_completed_from_task",
+            "gs_customizations.overrides.erpnext.timesheet.timesheet.clear_free_activity_fields"
+        ]
     },
     # Currently not working for some reason
     "Kanban Board": {
@@ -271,6 +280,11 @@ scheduler_events = {
 	"daily_long": [
 		"gs_customizations.utils.hrms.allocate_earned_leaves",
 	],
+    "cron": {
+        "0 17 * * *": [
+            "gs_customizations.synology.synology_schedule.schedule_daily_timesheet"
+        ]
+    }
 }
 
 # Testing
