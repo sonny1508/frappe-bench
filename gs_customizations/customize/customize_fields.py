@@ -9,6 +9,8 @@ def apply_custom_fields():
 	custom_leave_ledger_entry()
 	custom_leave_type
 
+	custom_employee()
+
 def apply_custom_properties():
 	property_company()
 
@@ -109,6 +111,23 @@ def property_company():
 	),
 
 # HRMS APP
+
+# =============== EMPLOYEE DOCTYPE ===============
+
+def custom_employee():
+	create_custom_fields({
+		"Employee": [
+			{
+				"default": "0",
+				"fieldname": "custom_enable_timesheet_checkin",
+				"fieldtype": "Check",
+				"insert_after": "status",
+				"is_system_generated": 0,
+				"label": "Enable Timesheet Check-in Enforcement",
+				"description": "When enabled, this employee will be redirected to the Timesheet Check-in page if they have unfilled timesheets for the current week.",
+			},
+		]
+	})
 
 # =============== LEAVE ALLOCATION DOCTYPE ===============
 
@@ -549,7 +568,7 @@ def property_task():
 		"Task",
 		"status",
 		"options",
-		"Open\nWorking\nQA Pending\nQA Reviewing\nQA Feedback\nQA Approved\nDelivered\nClient Feedback\nOverdue\nCompleted\nCancelled\nClosed\nTemplate",
+		"Open\nWorking\nQA Pending\nQA Reviewing\nQA Feedback\nQA Approved\nDelivered\nClient Feedback\nOverdue\nCompleted\nCancelled\nClosed",
 		"Text",
 	),
 	make_property_setter(

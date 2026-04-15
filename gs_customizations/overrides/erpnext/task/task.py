@@ -72,11 +72,11 @@ def custom_validate(doc, method):
 	auto_update(doc)
 
 def auto_update(doc):
-	auto_update_completed_by(doc)
+	# auto_update_completed_by(doc)
 	auto_update_completed_on(doc)
 
-	auto_set_task_assign_to_on_todo(doc)
-	auto_set_reviewer_on_qa_reviewing(doc)
+	auto_set_fields_on_todo(doc)
+	auto_set_reviewer(doc)
 	auto_update_tag_on_status(doc)
 
 def on_change(doc, method):
@@ -276,14 +276,13 @@ def validate_status_transition(doc):
 		)
 
 # Auto update fields, tags, etc
-def auto_set_reviewer_on_qa_reviewing(doc):
+def auto_set_reviewer(doc):
 	"""Auto-set custom_reviewer when status changes to QA Reviewing or QA Feedback"""
 	if doc.is_new():
 		return
 	
 	old_status = frappe.db.get_value("Task", doc.name, "status")
 	new_status = doc.status
-
 	target_statuses = ["QA Reviewing", "QA Feedback", "QA Approved"]
 	
 	# Only when transitioning TO "QA Reviewing" from something else
@@ -295,6 +294,17 @@ def auto_set_reviewer_on_qa_reviewing(doc):
 		)
 		if employee_name:
 			doc.custom_reviewer = employee_name
+			return
+		
+    # Fallback: if custom_reviewer is still empty, pull from Project
+	if not doc.custom_reviewer and doc.project:
+		default_reviewer = frappe.db.get_value(
+            "Portal User",
+            {"parent": doc.project, "parenttype": "Project", "idx": 1},
+            "custom_employee_name",
+		)
+		if default_reviewer:
+			doc.custom_reviewer = default_reviewer
 
 def auto_update_tag_on_status(doc):
 	"""Auto-add tags when status changes to feedback statuses"""
@@ -320,7 +330,7 @@ def auto_update_tag_on_status(doc):
 		doc.remove_tag("FB Client")
 		doc.remove_tag("FB Internal")
 
-def auto_set_task_assign_to_on_todo(doc):
+def auto_set_fields_on_todo(doc):
 	"""Update Task's custom_assign_to when assigned"""
 	if doc.is_new():
 		return
@@ -334,30 +344,52 @@ def auto_set_task_assign_to_on_todo(doc):
 		},
 		"allocated_to"
 	)
+	if todo:
+		employee = frappe.db.get_value(
+			"Employee",
+			{"user_id": todo},
+			"name"
+		)
 
 	from frappe.utils import get_fullname
-
 	full_name = get_fullname(todo)
 
-	if todo:
-		doc.custom_assign_to_employee = full_name
-		doc.custom_assign_to_id = todo
+	if doc.status in ["Completed", "Closed"]:
+		if todo:
+			if not doc.completed_by:
+				doc.completed_by = employee
+				doc.custom_completed_by_employee = full_name
 	else:
-		doc.custom_assign_to_employee = ""
-		doc.custom_assign_to_id = ""
+		if todo:
+			doc.custom_assign_to_employee = full_name
+			doc.custom_assign_to_id = todo
+		else:
+			doc.custom_assign_to_employee = ""
+			doc.custom_assign_to_id = ""
 
 @frappe.whitelist()
 def get_employee_from_todo(task_name):
     """Get employee ID from the user assigned in ToDo for this task"""
     # Get the ToDo linked to this task
-    todo = frappe.db.get_value('ToDo', 
-        {'reference_type': 'Task', 'reference_name': task_name, 'status': 'Open'}, 
-        'allocated_to'
+    todo = frappe.db.get_value(
+		"ToDo", 
+        {
+			"reference_type": "Task",
+		 	"reference_name": task_name,
+		 	"status": "Open"
+		}, 
+        "allocated_to"
     )
     
     if todo:
         # Get employee from the user
-        employee = frappe.db.get_value('Employee', {'user_id': todo}, 'name')
+        employee = frappe.db.get_value(
+			"Employee", 
+			{"user_id": todo},
+			["name", "employee_name"],
+			as_dict=True
+		)
+
         return employee
     
     return None

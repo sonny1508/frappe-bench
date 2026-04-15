@@ -64,7 +64,7 @@ web_include_js = [
 ]
 
 app_include_css = [
-    "/assets/gs_customizations/css/kanban.css?v=17",
+    "/assets/gs_customizations/css/kanban.css?v=19",
     "/assets/gs_customizations/css/kanban_inline_edit.css?v=13",
     # "/assets/gs_customizations/css/kanban_collapsible.css",
 ]
@@ -81,6 +81,8 @@ app_include_js = [
 
     "/assets/gs_customizations/js/erpnext/task/task.js?v=02",
     "/assets/gs_customizations/js/hrms/monthly_attendance_sheet/monthly_attendance_sheet.js?v=02",
+
+    "/assets/gs_customizations/js/timesheet_checkin_enforcer.js?v=03",
 
     # "/assets/gs_customizations/js/global_overrides.js",
 ]

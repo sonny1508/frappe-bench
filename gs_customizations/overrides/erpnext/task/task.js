@@ -20,7 +20,7 @@ frappe.ui.form.on('Task', {
 function update_completed_by_from_assigned_to(frm) {
     // When status changes to "Completed"
     if (frm.doc.status === "Completed") {
-        if (!frm.doc_completed_by) {
+        if (!frm.doc.completed_by) {
             frappe.call({
                 method: 'gs_customizations.overrides.erpnext.task.task.get_employee_from_todo',
                 args: {
@@ -28,7 +28,8 @@ function update_completed_by_from_assigned_to(frm) {
                 },
                 callback: function(r) {
                     if (r.message) {
-                        frm.set_value('completed_by', r.message);
+                        frm.set_value('completed_by', r.message.name);
+                        frm.set_value('custom_completed_by_employee', r.message.employee_name);
                     }
                 }
             });

@@ -168,19 +168,13 @@ def get_columns(filters: Filters) -> list[dict]:
 					"fieldname": "total_holidays",
 					"fieldtype": "Float",
 					"width": 120,
-				},
-				{
-					"label": _("Unmarked Days"),
-					"fieldname": "unmarked_days",
-					"fieldtype": "Float",
-					"width": 130,
-				},
-				{
-					"label": _("Insufficient Hours"),
-					"fieldname": "insufficient_hours",
-					"fieldtype": "Float",
-					"width": 140,
 				}
+				# {
+				# 	"label": _("Unmarked Days"),
+				# 	"fieldname": "unmarked_days",
+				# 	"fieldtype": "Float",
+				# 	"width": 130,
+				# },
 			]
 		)
 		columns.extend(get_columns_for_leave_types())
@@ -191,6 +185,12 @@ def get_columns(filters: Filters) -> list[dict]:
 					"fieldname": "total_paid",
 					"fieldtype": "Float",
 					"width": 110
+				},
+				{
+					"label": _("Insufficient Hours"),
+					"fieldname": "insufficient_hours",
+					"fieldtype": "Float",
+					"width": 140,
 				},
 				{
 					"label": _("Total Late Entries"),

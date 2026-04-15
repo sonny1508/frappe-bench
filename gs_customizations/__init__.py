@@ -26,10 +26,10 @@ apply_report_overrides()
 	
 # 	make_property_setter(
 # 		"Task",
-# 		"completed_by",
+# 		"status",
 # 		"options",
-# 		"Employee",
-# 		"Data",
+# 		"Open\nWorking\nQA Pending\nQA Reviewing\nQA Feedback\nQA Approved\nDelivered\nClient Feedback\nOverdue\nCompleted\nCancelled\nClosed",
+# 		"Text",
 # 	),
 	
 # property_task()
