@@ -5,7 +5,7 @@ FREE_FIELDS = ["project", "project_name", "task", "custom_task_name", "custom_ta
 
 def clear_free_activity_fields(doc, method):
     for row in doc.time_logs:
-        if row.activity_type == "Free":
+        if row.activity_type in ["Free", "Documents"]:
             for field in FREE_FIELDS:
                 row.set(field, None)
 

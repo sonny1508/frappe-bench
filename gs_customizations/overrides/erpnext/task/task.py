@@ -134,12 +134,6 @@ def validate_task_fields_permissions(doc):
 	if any(role in manager_roles for role in session_roles):
 		return
 	
-	# if "GS - Projects Manager" in session_roles:
-	# 	return
-
-	# if "System Manager" in session_roles:
-	# 	return
-	
 	# Skip new documents
 	if doc.is_new():
 		return
@@ -277,7 +271,7 @@ def validate_status_transition(doc):
 
 # Auto update fields, tags, etc
 def auto_set_reviewer(doc):
-	"""Auto-set custom_reviewer when status changes to QA Reviewing or QA Feedback"""
+	"""Auto-set custom_reviewer when status changes to QA Reviewing/Feedback/Approved"""
 	if doc.is_new():
 		return
 	
@@ -297,14 +291,14 @@ def auto_set_reviewer(doc):
 			return
 		
     # Fallback: if custom_reviewer is still empty, pull from Project
-	if not doc.custom_reviewer and doc.project:
-		default_reviewer = frappe.db.get_value(
-            "Portal User",
-            {"parent": doc.project, "parenttype": "Project", "idx": 1},
-            "custom_employee_name",
-		)
-		if default_reviewer:
-			doc.custom_reviewer = default_reviewer
+	# if not doc.custom_reviewer and doc.project:
+	# 	default_reviewer = frappe.db.get_value(
+    #         "Portal User",
+    #         {"parent": doc.project, "parenttype": "Project", "idx": 1},
+    #         "custom_employee_name",
+	# 	)
+	# 	if default_reviewer:
+	# 		doc.custom_reviewer = default_reviewer
 
 def auto_update_tag_on_status(doc):
 	"""Auto-add tags when status changes to feedback statuses"""

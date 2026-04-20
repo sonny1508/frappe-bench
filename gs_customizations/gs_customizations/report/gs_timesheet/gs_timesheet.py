@@ -73,7 +73,7 @@ def get_data(conditions, filters):
 	for row in time_sheet:
 		row = list(row)
 		row[10] = "True" if row[10] else "False"
-		if row[6] == "Free":
+		if row[6] in ["Free", "Documents"]:
 			row[11] = "Free"
 		result.append(row)
 

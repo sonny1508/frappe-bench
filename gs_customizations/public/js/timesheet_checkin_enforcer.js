@@ -107,15 +107,41 @@
 		});
 	}
 
+	// --- Verify-before-redirect (guards against stale boot data) ----------
+	function calculate_include_today() {
+		var checkin = frappe.boot && frappe.boot.timesheet_checkin;
+		if (!checkin || !checkin.end_working_hour) return 0;
+		var parts = String(checkin.end_working_hour).split(":").map(Number);
+		var eod = new Date();
+		eod.setHours(parts[0] || 0, parts[1] || 0, parts[2] || 0, 0);
+		return Date.now() >= eod.getTime() ? 1 : 0;
+	}
+
+	function verify_and_redirect() {
+		if (is_allowed_route()) return;
+		frappe.call({
+			method: "gs_customizations.api.get_timesheet_checkin_status",
+			args: { include_today: calculate_include_today() },
+			callback: function (r) {
+				if (r && r.message) {
+					frappe.boot.timesheet_checkin = r.message;
+					if (should_enforce()) {
+						redirect_to_checkin();
+					}
+				}
+			},
+		});
+	}
+
 	// --- Initialize -------------------------------------------------------
 	$(document).on("app_ready", function () {
 		install_route_guard();
 		setup_eod_timer();
 
-		// Initial check on load (for users already behind on their timesheets)
+		// Initial check on load — boot data might be stale (e.g. new tab),
+		// so verify with the server before redirecting.
 		if (should_enforce()) {
-			// Defer one tick so the router is ready
-			setTimeout(redirect_to_checkin, 0);
+			verify_and_redirect();
 		}
 	});
 
@@ -126,7 +152,7 @@
 			install_route_guard();
 			setup_eod_timer();
 			if (should_enforce()) {
-				setTimeout(redirect_to_checkin, 0);
+				verify_and_redirect();
 			}
 		}
 	});
