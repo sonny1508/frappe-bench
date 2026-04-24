@@ -1,5 +1,13 @@
 frappe.ui.form.on("Leave Application", {
 
+    refresh: function(frm) {
+        apply_field_permission(frm);
+    },
+
+    onload: function(frm) {
+        apply_field_permission(frm);
+    },
+
 	make_dashboard: function (frm) {
 		let leave_details;
 		let lwps;
@@ -83,6 +91,12 @@ frappe.ui.form.on("Leave Application", {
 		frm.events.validate_from_to_date(frm, "to_date");
 		frm.trigger("make_dashboard");
 		frm.trigger("calculate_total_days");
+	},
+
+	custom_use_single_date: function (frm) {
+		if (!frm.doc.custom_use_single_date) {
+			frm.set_value("to_date", null);
+		}
 	},
 
 	custom_single_date: function (frm) {
@@ -310,3 +324,19 @@ frappe.ui.form.on("Leave Application", {
 		}
 	},
 });
+
+function apply_field_permission(frm) {
+	const managerRoles = frappe.boot.manager_roles || [];
+	const userRoles = frappe.user_roles || [];
+	const is_manager = managerRoles.some(role => userRoles.includes(role));
+	
+	if (is_manager) return;
+	
+	const restricted_fields = ['follow_via_email'];
+	
+	restricted_fields.forEach(fieldname => {
+		frm.set_df_property(fieldname, 'read_only', 1);
+	});
+	
+	frm.refresh_fields();
+}

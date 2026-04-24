@@ -106,7 +106,14 @@ def auto_update_completed_by(doc):
 				doc.completed_by = employee
 
 def auto_update_completed_on(doc):
-	if doc.status in ["Completed", "Closed"] and not doc.completed_on:
+	if doc.status == "Completed":
+		if not doc.has_value_changed("status"):
+			return
+		old_status = doc.get_doc_before_save()
+		if old_status and old_status.status == "Closed":
+			return
+		doc.completed_on = now_datetime()
+	elif doc.status == "Closed" and not doc.completed_on:
 		doc.completed_on = now_datetime()
 
 def set_color_by_priority(doc):
@@ -277,7 +284,7 @@ def auto_set_reviewer(doc):
 	
 	old_status = frappe.db.get_value("Task", doc.name, "status")
 	new_status = doc.status
-	target_statuses = ["QA Reviewing", "QA Feedback", "QA Approved"]
+	target_statuses = ["QA Reviewing", "QA Feedback", "QA Approved", "Delivered"]
 	
 	# Only when transitioning TO "QA Reviewing" from something else
 	if new_status in target_statuses and old_status != new_status:

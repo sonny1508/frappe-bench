@@ -36,7 +36,8 @@ def get_column():
 		_("Task Name") + "::140",
 		_("Completed") + "::80",
 		_("Issue") + "::120",
-		_("Status") + "::80",
+		_("Reviewer") + "::140",
+		# _("Status") + "::80",
 	]
 
 
@@ -50,7 +51,7 @@ def get_data(conditions, filters):
 		`tabTimesheet Detail`.task, `tabTimesheet Detail`.custom_task_name,
 		`tabTimesheet Detail`.completed,
 		`tabIssue`.subject as issue_name,
-		`tabTimesheet`.status
+		`tabTask`.custom_reviewer as reviewer_name
 		from
 			`tabTimesheet Detail`
 			inner join `tabTimesheet` on `tabTimesheet Detail`.parent = `tabTimesheet`.name
@@ -154,7 +155,8 @@ def create_summary_rows(employee, employee_name, activity_hours):
 			"",  # Task Name
 			"",  # Completed
 			"",  # Issue
-			"",  # Status
+			"",  # Reviewer
+			# "",  # Status
 		]
 		summary_rows.append(summary_row)
 
