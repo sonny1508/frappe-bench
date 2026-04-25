@@ -97,6 +97,9 @@ frappe.ui.form.on("Leave Application", {
 		if (!frm.doc.custom_use_single_date) {
 			frm.set_value("to_date", null);
 		}
+		else if (frm.doc.custom_use_single_date) {
+			frm.set_value("custom_single_date", null);
+		}
 	},
 
 	custom_single_date: function (frm) {
