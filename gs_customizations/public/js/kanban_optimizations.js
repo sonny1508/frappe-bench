@@ -6,7 +6,7 @@
 (function() {
     "use strict";
     
-    const IDLE_LIMIT_MS = 10 * 60 * 1000; // 10 minutes
+    const IDLE_LIMIT_MS = 5 * 60 * 1000; // 10 minutes
     const CHECK_INTERVAL_MS = 60 * 1000;  // Check every 60 seconds
     
     let lastActivity = Date.now();
