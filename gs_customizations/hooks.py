@@ -85,6 +85,7 @@ app_include_js = [
     "/assets/gs_customizations/js/timesheet_checkin_enforcer.js?v=04",
 
     # "/assets/gs_customizations/js/global_overrides.js",
+    "/assets/gs_customizations/js/general/sidebar.js?v=1",
 ]
 
 doctype_js = {
