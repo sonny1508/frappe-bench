@@ -1,3 +1,4 @@
+import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 
@@ -23,6 +24,8 @@ def apply_custom_properties():
 	property_task()
 	property_task_type()
 	property_timesheet()
+
+	property_attendance()
 
 # FRAPPE APP
 
@@ -527,6 +530,13 @@ def property_attendance():
 		"Check",
 	)
 
+	make_property_setter(
+		"Attendance",
+		"status",
+		"options",
+		"Present\nAbsent\nOn Leave\nHours Leave\nWork From Home",
+		"Text",
+	)
 
 # ERPNEXT APP
 

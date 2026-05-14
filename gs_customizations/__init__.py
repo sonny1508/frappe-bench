@@ -17,7 +17,15 @@ def apply_desk_overrides():
 	from gs_customizations.overrides.frappe.desk.search import apply_search_overrides
 	apply_search_overrides()
 
+def apply_doctype_overrides():
+	from gs_customizations.customize.customize_fields import (
+		apply_custom_fields,
+		apply_custom_properties,
+	)
+
 apply_report_overrides()
+apply_doctype_overrides()
+
 # apply_desk_overrides()
 
 # from frappe.custom.doctype.property_setter.property_setter import make_property_setter
