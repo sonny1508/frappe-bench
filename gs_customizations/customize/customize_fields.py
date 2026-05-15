@@ -24,6 +24,8 @@ def apply_custom_properties():
 	property_task_type()
 	property_timesheet()
 
+	property_attendance()
+
 # FRAPPE APP
 
 # =============== COMPANY DOCTYPE ===============
@@ -527,6 +529,13 @@ def property_attendance():
 		"Check",
 	)
 
+	make_property_setter(
+		"Attendance",
+		"status",
+		"options",
+		"Present\nAbsent\nOn Leave\nHours Leave\nWork From Home",
+		"Text",
+	)
 
 # ERPNEXT APP
 
