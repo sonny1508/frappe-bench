@@ -128,6 +128,15 @@ def custom_employee():
 				"label": "Enable Timesheet Check-in Enforcement",
 				"description": "When enabled, this employee will be redirected to the Timesheet Check-in page if they have unfilled timesheets for the current week.",
 			},
+			{
+				"default": "0",
+				"fieldname": "custom_enable_matrix_notifications",
+				"fieldtype": "Check",
+				"insert_after": "custom_enable_timesheet_checkin",
+				"is_system_generated": 0,
+				"label": "Enable Matrix Notifications",
+				"description": "When enabled, this employee will receive task notifications via Element/Matrix.",
+			},
 		]
 	})
 

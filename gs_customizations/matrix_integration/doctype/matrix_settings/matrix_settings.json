@@ -1,0 +1,171 @@
+{
+ "actions": [],
+ "creation": "2026-05-19 00:00:00.000000",
+ "description": "Configure Matrix/Element bot integration for notifications and room management",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "bot_configuration_section",
+  "enabled",
+  "homeserver_url",
+  "column_break_bot",
+  "bot_user_id",
+  "bot_access_token",
+  "bot_display_name",
+  "bot_is_admin",
+  "room_provisioning_section",
+  "auto_provision_rooms",
+  "dm_rooms_section",
+  "dm_rooms",
+  "group_rooms_section",
+  "group_rooms",
+  "development_section",
+  "test_message",
+  "column_break_dev",
+  "test_target_type",
+  "test_dm_username",
+  "test_group_room"
+ ],
+ "fields": [
+  {
+   "fieldname": "bot_configuration_section",
+   "fieldtype": "Section Break",
+   "label": "Bot Configuration"
+  },
+  {
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enable Matrix Integration"
+  },
+  {
+   "fieldname": "homeserver_url",
+   "fieldtype": "Data",
+   "label": "Homeserver URL",
+   "description": "e.g. https://matrix.glenda-studio-chat.com",
+   "mandatory_depends_on": "eval:doc.enabled"
+  },
+  {
+   "fieldname": "column_break_bot",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "bot_user_id",
+   "fieldtype": "Data",
+   "label": "Bot Matrix User ID",
+   "description": "e.g. @gs.bot:matrix.glenda-studio-chat.com",
+   "mandatory_depends_on": "eval:doc.enabled"
+  },
+  {
+   "fieldname": "bot_access_token",
+   "fieldtype": "Password",
+   "label": "Bot Access Token",
+   "mandatory_depends_on": "eval:doc.enabled",
+   "description": "Long-lived token from MAS admin or Synapse admin API"
+  },
+  {
+   "fieldname": "bot_display_name",
+   "fieldtype": "Data",
+   "label": "Bot Display Name"
+  },
+  {
+   "default": "0",
+   "fieldname": "bot_is_admin",
+   "fieldtype": "Check",
+   "label": "Bot Has Synapse Admin Privileges",
+   "description": "Enable to use Synapse admin API for force-joining users to rooms"
+  },
+  {
+   "fieldname": "room_provisioning_section",
+   "fieldtype": "Section Break",
+   "label": "Room Provisioning"
+  },
+  {
+   "default": "0",
+   "fieldname": "auto_provision_rooms",
+   "fieldtype": "Check",
+   "label": "Auto-Provision DM Rooms on Employee Update",
+   "description": "Automatically create a DM room when an Employee's linked User has a username"
+  },
+  {
+   "fieldname": "dm_rooms_section",
+   "fieldtype": "Section Break",
+   "label": "DM Rooms"
+  },
+  {
+   "fieldname": "dm_rooms",
+   "fieldtype": "Table",
+   "label": "DM Rooms",
+   "options": "Matrix DM Room"
+  },
+  {
+   "fieldname": "group_rooms_section",
+   "fieldtype": "Section Break",
+   "label": "Group Rooms"
+  },
+  {
+   "fieldname": "group_rooms",
+   "fieldtype": "Table",
+   "label": "Group Rooms",
+   "options": "Matrix Group Room"
+  },
+  {
+   "fieldname": "development_section",
+   "fieldtype": "Section Break",
+   "label": "Development / Testing",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "test_message",
+   "fieldtype": "Small Text",
+   "label": "Test Message"
+  },
+  {
+   "fieldname": "column_break_dev",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "DM",
+   "fieldname": "test_target_type",
+   "fieldtype": "Select",
+   "label": "Send To",
+   "options": "DM\nGroup"
+  },
+  {
+   "depends_on": "eval:doc.test_target_type == 'DM'",
+   "fieldname": "test_dm_username",
+   "fieldtype": "Data",
+   "label": "DM Username",
+   "description": "Username from the DM Rooms table"
+  },
+  {
+   "depends_on": "eval:doc.test_target_type == 'Group'",
+   "fieldname": "test_group_room",
+   "fieldtype": "Data",
+   "label": "Group Room Name",
+   "description": "Room name from the Group Rooms table"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-05-19 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Matrix Integration",
+ "name": "Matrix Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
