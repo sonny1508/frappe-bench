@@ -582,6 +582,13 @@ def property_task():
 	),
 	make_property_setter(
 		"Task",
+		"status",
+		"hidden",
+		"0",
+		"Check",
+	),
+	make_property_setter(
+		"Task",
 		"priority",
 		"options",
 		"Urgent\nHigh\nMedium\nLow\nSupport",
