@@ -5,9 +5,7 @@ frappe.call({
 	args: {
 		doctype: "User",
 		fields: ["name", "full_name"],
-		filters: {
-			enabled: 1
-		},
+
 		limit_page_length: 200
 	},
 	callback(r) {
