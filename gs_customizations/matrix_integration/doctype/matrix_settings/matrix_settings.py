@@ -72,3 +72,40 @@ class MatrixSettings(Document):
 		from gs_customizations.matrix.provisioning import provision_all_dm_rooms
 		result = provision_all_dm_rooms()
 		return result
+
+	@frappe.whitelist()
+	def scan_empty_rooms(self):
+		"""List rooms named 'Empty room' with at most 1 joined member."""
+		from gs_customizations.matrix.bot import list_rooms
+
+		rooms = list_rooms(search_term="Empty room")
+		return [
+			r for r in rooms
+			if r.get("name") == "Empty room" and r.get("joined_members", 0) <= 1
+		]
+
+	@frappe.whitelist()
+	def delete_empty_rooms(self, room_ids=None):
+		"""Delete a list of rooms by their room IDs."""
+		from gs_customizations.matrix.bot import delete_room
+
+		if not room_ids:
+			frappe.throw("No rooms specified for deletion.")
+
+		if isinstance(room_ids, str):
+			room_ids = frappe.parse_json(room_ids)
+
+		deleted = 0
+		failed = 0
+		errors = []
+
+		for room_id in room_ids:
+			try:
+				delete_room(room_id)
+				deleted += 1
+			except Exception as e:
+				failed += 1
+				errors.append({"room_id": room_id, "error": str(e)})
+				frappe.logger("matrix").error(f"Failed to delete room {room_id}: {e}")
+
+		return {"deleted": deleted, "failed": failed, "errors": errors}

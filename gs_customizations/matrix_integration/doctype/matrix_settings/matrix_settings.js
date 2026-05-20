@@ -65,5 +65,54 @@ frappe.ui.form.on("Matrix Settings", {
 				},
 			});
 		}, __("Dev"));
+
+		// Clean Empty Rooms button
+		if (frm.doc.bot_is_admin) {
+			frm.add_custom_button(__("Clean Empty Rooms"), function () {
+				frappe.call({
+					method: "scan_empty_rooms",
+					doc: frm.doc,
+					freeze: true,
+					freeze_message: __("Scanning for empty rooms..."),
+					callback: function (r) {
+						let rooms = r.message || [];
+						if (rooms.length === 0) {
+							frappe.msgprint(__("No empty rooms found."));
+							return;
+						}
+
+						let room_ids = rooms.map((r) => r.room_id);
+
+						frappe.confirm(
+							__(
+								"Found {0} empty rooms (named 'Empty room' with 1 or fewer members). Delete them all?",
+								[rooms.length]
+							),
+							function () {
+								frappe.call({
+									method: "delete_empty_rooms",
+									doc: frm.doc,
+									args: { room_ids: room_ids },
+									freeze: true,
+									freeze_message: __("Deleting {0} rooms...", [room_ids.length]),
+									callback: function (r) {
+										if (r.message) {
+											frappe.msgprint({
+												title: __("Cleanup Complete"),
+												indicator: "green",
+												message: __(
+													"Deleted: {0}, Failed: {1}",
+													[r.message.deleted || 0, r.message.failed || 0]
+												),
+											});
+										}
+									},
+								});
+							}
+						);
+					},
+				});
+			}, __("Admin"));
+		}
 	},
 });

@@ -159,21 +159,21 @@ def get_recipients(status_config, assignees, subscribers):
 
 def build_message(doc, assignees):
 	"""Build the notification message."""
-	message = f"Task: ==== *{doc.subject}* is now *{doc.status}* 🎉"
+	message = f"Task: ===== *{doc.subject}* is now *{doc.status}* 🎉"
 
 	if doc.project:
 		project_name = frappe.db.get_value("Project", doc.project, "project_name")
 		if project_name:
-			message += f"\nProject: === {project_name}"
+			message += f"\nProject: ==== {project_name}"
 
 	if doc.type:
 		message += f"\nType: ====== {doc.type}"
 
 	if doc.exp_end_date:
-		message += f"\nDue: ======= {doc.exp_end_date}"
+		message += f"\nDue: ======== {doc.exp_end_date}"
 
 	if assignees:
-		message += f"\nAssigned: == {', '.join(assignees)}"
+		message += f"\nAssigned: === *{', '.join(assignees)}*"
 		if doc.expected_time:
 			message += f"\nExpected Time: {doc.expected_time} hours"
 

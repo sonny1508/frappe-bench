@@ -4,9 +4,14 @@ Matrix/Synapse HTTP client for the GS bot.
 All Matrix API calls go through this module. Functions read credentials from the
 Matrix Settings singleton and talk to the local Synapse instance.
 
-Authentication: Uses a long-lived access token generated via MAS admin or
-Synapse admin API. If the token expires (401), all calls raise a clear error
-so the admin knows to replace it.
+Authentication: Uses a single long-lived PAT (Personal Access Token) generated
+via the MAS admin panel for the gs.bot user. Since gs.bot is a Synapse admin,
+this one token authenticates both:
+- Matrix client API calls (send_message, createRoom, whoami)
+- Synapse admin API calls (server notices, force-join)
+
+If the token expires (401), calls raise a clear error so the admin knows to
+replace it in Matrix Settings → Bot Access Token.
 """
 
 import frappe
@@ -276,5 +281,61 @@ def send_message(room_id, message_text):
 		"POST", settings,
 		f"/_matrix/client/v3/rooms/{room_id}/send/m.room.message",
 		json=payload,
+	)
+	return response.json()
+
+
+# ---------------------------------------------------------------------------
+# Synapse Admin API
+# ---------------------------------------------------------------------------
+
+def list_rooms(search_term=None):
+	"""List rooms from Synapse admin API with pagination.
+
+	GET /_synapse/admin/v1/rooms
+	"""
+	settings = get_settings()
+
+	if not settings.bot_is_admin:
+		frappe.throw("Bot must have Synapse admin privileges to list rooms.")
+
+	all_rooms = []
+	offset = 0
+	limit = 100
+
+	while True:
+		params = {"from": offset, "limit": limit, "dir": "f"}
+		if search_term:
+			params["search_term"] = search_term
+
+		response = _request("GET", settings, "/_synapse/admin/v1/rooms", params=params)
+		data = response.json()
+
+		rooms = data.get("rooms", [])
+		all_rooms.extend(rooms)
+
+		if "next_batch" not in data or not rooms:
+			break
+
+		offset = data["next_batch"]
+
+	return all_rooms
+
+
+def delete_room(room_id):
+	"""Delete and purge a room via Synapse admin API.
+
+	POST /_synapse/admin/v1/rooms/{room_id}/delete  (synchronous)
+	"""
+	settings = get_settings()
+
+	if not settings.bot_is_admin:
+		frappe.throw("Bot must have Synapse admin privileges to delete rooms.")
+
+	response = _request(
+		"POST", settings,
+		f"/_synapse/admin/v1/rooms/{room_id}/delete",
+		json={"purge": True},
+		timeout=30,
 	)
 	return response.json()
