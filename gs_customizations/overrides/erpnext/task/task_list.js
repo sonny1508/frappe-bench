@@ -6,7 +6,6 @@ frappe.listview_settings["Task"] = {
 		"exp_start_date",
 		"exp_end_date",
 		"subject",
-		// "progress",
 		"custom_utilization",
 		"depends_on_tasks",
 	],
