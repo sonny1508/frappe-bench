@@ -6,7 +6,7 @@ frappe.listview_settings["Task"] = {
 		"exp_start_date",
 		"exp_end_date",
 		"subject",
-		"progress",
+		"custom_utilization",
 		"depends_on_tasks",
 	],
 	onload: function (listview) {
@@ -55,8 +55,8 @@ frappe.listview_settings["Task"] = {
 			</p>`;
 		}
 		html += `<p class="mb-1">
-			${__("Progress")}:
-			<span class="text-white">${ganttobj.progress}%</span>
+			${__("Utilization")}:
+			<span class="text-white">${task.custom_utilization || 0}%</span>
 		</p>`;
 
 		if (task._assign) {

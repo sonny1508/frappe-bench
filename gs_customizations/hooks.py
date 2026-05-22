@@ -75,7 +75,7 @@ app_include_js = [
     # "/assets/gs_customizations/js/kanban_collapsible.js",
     # "/assets/gs_customizations/js/kanban_filters.js",
 
-    "/assets/gs_customizations/js/kanban_customizations.js?v=31",
+    "/assets/gs_customizations/js/kanban_customizations.js?v=32",
     "/assets/gs_customizations/js/kanban_optimizations.js?v=14",
     "/assets/gs_customizations/js/list_view_customizations.js?v=02",
 

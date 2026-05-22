@@ -9,11 +9,9 @@ frappe.ui.form.on('Task', {
 
     refresh: function(frm) {
         set_color_by_priority(frm);
-        apply_task_field_permissions(frm);
     },
     
     onload: function(frm) {
-        apply_task_field_permissions(frm);
     }
 });
 
@@ -61,37 +59,37 @@ function set_color_by_priority(frm) {
     }
 }
 
-function apply_task_field_permissions(frm) {
-    if (frm.is_new()) return;
+// function apply_task_field_permissions(frm) {
+//     if (frm.is_new()) return;
 
-    const managerRoles = frappe.boot.manager_roles || [];
-    const userRoles = frappe.user_roles || [];
-    const is_manager = managerRoles.some(role => userRoles.includes(role));
+//     const managerRoles = frappe.boot.manager_roles || [];
+//     const userRoles = frappe.user_roles || [];
+//     const is_manager = managerRoles.some(role => userRoles.includes(role));
     
-    if (is_manager) return;
+//     if (is_manager) return;
     
-    const allowed_fields = ['progress'];
+//     const allowed_fields = ['progress'];
     
-    check_task_user_assignment(frm).then(is_assigned => {
-        const meta = frappe.get_meta('Task');
+//     check_task_user_assignment(frm).then(is_assigned => {
+//         const meta = frappe.get_meta('Task');
         
-        meta.fields.forEach(df => {
-            if (['Section Break', 'Column Break', 'Tab Break', 'HTML'].includes(df.fieldtype)) {
-                return;
-            }
+//         meta.fields.forEach(df => {
+//             if (['Section Break', 'Column Break', 'Tab Break', 'HTML'].includes(df.fieldtype)) {
+//                 return;
+//             }
             
-            const fieldname = df.fieldname;
+//             const fieldname = df.fieldname;
             
-            if (is_assigned && allowed_fields.includes(fieldname)) {
-                frm.set_df_property(fieldname, 'read_only', 0);
-            } else {
-                frm.set_df_property(fieldname, 'read_only', 1);
-            }
-        });
+//             if (is_assigned && allowed_fields.includes(fieldname)) {
+//                 frm.set_df_property(fieldname, 'read_only', 0);
+//             } else {
+//                 frm.set_df_property(fieldname, 'read_only', 1);
+//             }
+//         });
         
-        frm.refresh_fields();
-    });
-}
+//         frm.refresh_fields();
+//     });
+// }
 
 function check_task_user_assignment(frm) {
     return new Promise((resolve) => {

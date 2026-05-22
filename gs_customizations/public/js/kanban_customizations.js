@@ -73,25 +73,12 @@
             linkDoctype: "Task Type",
             restricted: true
         },
-        progress: {
-            fieldname: "progress",
-            label: "Progress",
-            detectPatterns: ["Progress", "%"],
-            optionType: "static",
-            options: [
-                { value: 0, display: "0%" },
-                { value: 10, display: "10%" },
-                { value: 20, display: "20%" },
-                { value: 30, display: "30%" },
-                { value: 40, display: "40%" },
-                { value: 50, display: "50%" },
-                { value: 60, display: "60%" },
-                { value: 70, display: "70%" },
-                { value: 80, display: "80%" },
-                { value: 90, display: "90%" },
-                { value: 100, display: "100%" }
-            ],
-            isNumeric: true,
+        custom_utilization: {
+            fieldname: "custom_utilization",
+            label: "Utilization",
+            detectPatterns: ["Utilization"],
+            readonly: true,
+            isNumeric: true
         }
     };
 
@@ -205,6 +192,9 @@
         
         state.editableFieldTypes = new Set();
         for (const [fieldType, config] of Object.entries(FIELD_CONFIGS)) {
+            if (config.readonly === true) {
+                continue;
+            }
             if (config.restricted !== true || isManager) {
                 state.editableFieldTypes.add(fieldType);
             }
@@ -435,6 +425,11 @@
 
                 function get_doc_content(card) {
                     let fields = [];
+
+                    cur_list.board.fields = cur_list.board.fields.map(f =>
+                        f === "progress" ? "custom_utilization" : f
+                    );
+
                     for (let field_name of cur_list.board.fields) {
                         let field =
                             frappe.meta.docfield_map[card.doctype]?.[field_name] ||
@@ -725,6 +720,9 @@
 
     function applyBoardFilters() {
         const board = cur_list?.board;
+        if (cur_list?.board?.fields) {
+            cur_list.board.fields = ["status", "type", "custom_utilization"];
+        }
         const boardName = board?.name;
         
         if (!boardName || state.appliedBoardFilter === boardName) return;

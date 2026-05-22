@@ -7,9 +7,10 @@ def apply_custom_fields():
 	custom_leave_allocation()
 	custom_leave_application()
 	custom_leave_ledger_entry()
-	custom_leave_type
+	custom_leave_type()
 
 	custom_employee()
+	custom_task()
 
 def apply_custom_properties():
 	property_company()
@@ -577,7 +578,15 @@ def custom_task():
 				"is_system_generated": 0,
 				"label": "Reviewer",
 				"read_only": 1,
-			},			
+			},
+			{
+				"fieldname": "custom_utilization",
+				"fieldtype": "Percent",
+				"insert_after": "exp_end_date",
+				"is_system_generated": 0,
+				"label": "Utilization",
+				"read_only": 1,
+			},						
 		]
 	})
 
@@ -623,7 +632,14 @@ def property_task():
 		"hidden",
 		"1",
 		"Check",
-	)
+	),
+	make_property_setter(
+		"Task",
+		"progress",
+		"hidden",
+		"1",
+		"Check"
+	),
 
 # =============== TASK TYPE DOCTYPE ===============
 
