@@ -70,7 +70,7 @@ function apply_task_field_permissions(frm) {
     
     if (is_manager) return;
     
-    const allowed_fields = ['progress'];
+    const allowed_fields = ['status'];
     
     check_task_user_assignment(frm).then(is_assigned => {
         const meta = frappe.get_meta('Task');

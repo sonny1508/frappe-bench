@@ -2,6 +2,7 @@ import frappe
 from frappe import _, throw
 
 from frappe.utils import now_datetime
+from frappe.utils import flt
 
 from frappe.desk.form.assign_to import clear, close_all_assignments
 from frappe.model.mapper import get_mapped_doc
@@ -18,6 +19,9 @@ class CustomTask(Task):
 		self.validate_dependencies_for_template_task()
 		self.validate_completed_on()
 		self.validate_parent_is_group()
+		
+	def validate_progress(self):
+		pass
 	
 
 	def validate_status(self):
@@ -51,6 +55,20 @@ class CustomTask(Task):
 		self.update_project()
 		self.unassign_todo()
 		self.populate_depends_on()
+		self.update_utilization()
+
+	def update_utilization(self):
+		expected = flt(self.expected_time or 0)
+		actual = flt(self.actual_time or 0)
+
+		if expected <= 0:
+			custom_utilization = 0
+		else:
+			custom_utilization = round((actual / expected) * 100, 2)
+
+		if flt(self.custom_utilization) != custom_utilization:
+			self.db_set("custom_utilization", custom_utilization, update_modified=False)
+			self.custom_utilization = custom_utilization
 	
 	def unassign_todo(self):
 		if self.status == "Closed":
@@ -146,7 +164,8 @@ def validate_task_fields_permissions(doc):
 		return
 	
 	# Fields that GS - Projects User is allowed to modify (when assigned)
-	allowed_fields = ['status', 'progress']
+	allowed_fields = ['status']
+
 	
 	# Get changed fields by directly comparing with database
 	changed_fields = get_changed_fields_from_db(doc, allowed_fields)
@@ -166,7 +185,7 @@ def validate_task_fields_permissions(doc):
 	
 	if changed_fields['restricted']:
 		frappe.throw(
-			f"You are only allowed to modify 'Status' and 'Progress' fields. "
+			f"You are only allowed to modify 'Status' fields. "
 			f"Cannot modify: {', '.join(changed_fields['restricted'])}",
 			title="Permission Denied"
 		)
@@ -192,11 +211,11 @@ def get_changed_fields_from_db(doc, allowed_fields):
 	
 	# Fields to check - only editable, relevant fields
 	fields_to_check = [
-		'status', 'progress', 'priority', 'type', 'subject', 'project', 'description',
+		'status', 'priority', 'type', 'subject', 'project', 'description',
 		'expected_time', 'exp_start_date', 'exp_end_date', 'parent_task',
 		'is_group', 'is_template', 'color', 'department', 'company',
-		'completed_by', 'completed_on'
-		'custom_assign_to_id', 'custom_reviewer',
+		'completed_by', 'completed_on',
+		'custom_assign_to_id', 'custom_reviewer', 'custom_utilization',
 		# Add more fields as needed
 	]
 	
