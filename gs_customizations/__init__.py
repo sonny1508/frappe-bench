@@ -22,13 +22,16 @@ def apply_doctype_overrides():
 		apply_custom_fields,
 		apply_custom_properties,
 	)
+	apply_custom_fields()
+	apply_custom_properties()
 
 apply_report_overrides()
-apply_doctype_overrides()
+# apply_doctype_overrides()
 
 # apply_desk_overrides()
 
-# from frappe.custom.doctype.property_setter.property_setter import make_property_setter
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 
 # def property_task():	
 	
@@ -41,3 +44,19 @@ apply_doctype_overrides()
 # 	),
 	
 # property_task()
+
+# def custom_task():
+# 	create_custom_fields({
+# 		"Task": [
+# 			{
+# 				"fieldname": "custom_utilization",
+# 				"fieldtype": "Percent",
+# 				"insert_after": "exp_end_date",
+# 				"is_system_generated": 0,
+# 				"label": "Utilization",
+# 				"read_only": 1,
+# 			},				
+# 		]
+# 	})
+
+# custom_task()
