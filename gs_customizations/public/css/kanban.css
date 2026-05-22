@@ -124,6 +124,10 @@
     display: block !important;
 }
 
+.kanban-card .kanban-card-doc > div.kanban-show-default {
+    display: block !important;
+}
+
 /* Expanded state - show all children */
 .kanban-card.expanded .kanban-card-doc > div {
     display: block !important;

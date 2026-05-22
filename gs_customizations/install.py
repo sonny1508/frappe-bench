@@ -16,3 +16,6 @@ def apply_doctype_overrides():
 		apply_custom_fields,
 		apply_custom_properties,
 	)
+
+	apply_custom_fields()
+	apply_custom_properties()
