@@ -227,7 +227,10 @@ override_doctype_class = {
 doc_events = {
     "ToDo": {
         "before_insert": "gs_customizations.validate.permissions.block_assign",
-        "after_insert": "gs_customizations.synology.synology.notify_todo_insert"
+        "after_insert": [
+            "gs_customizations.synology.synology.notify_todo_insert",
+            "gs_customizations.matrix.notifications.notify_todo_insert"
+        ]
     },
     "Company": {
         "validate": "gs_customizations.overrides.erpnext.company.company.validate"
@@ -237,7 +240,13 @@ doc_events = {
         "before_insert": "gs_customizations.utils.network_access.check_doctype_access",
         "validate": "gs_customizations.overrides.erpnext.task.task.custom_validate",
         "on_change": "gs_customizations.overrides.erpnext.task.task.on_change",
-        "on_update": "gs_customizations.synology.synology.notify_task_update",
+        "on_update": [
+            "gs_customizations.synology.synology.notify_task_update",
+            "gs_customizations.matrix.notifications.notify_task_update"
+        ],
+    },
+    "Employee": {
+        "on_update": "gs_customizations.matrix.provisioning.on_employee_update"
     },
     "Timesheet": {
         "validate": [
@@ -282,12 +291,12 @@ doc_events = {
 scheduler_events = {
 	"daily_long": [
 		"gs_customizations.utils.hrms.allocate_earned_leaves",
-	],
-    "cron": {
-        "0 17 * * *": [
-            "gs_customizations.synology.synology_schedule.schedule_daily_timesheet"
-        ]
-    }
+	]
+    # "cron": {
+    #     "0 17 * * *": [
+    #         "gs_customizations.synology.synology_schedule.schedule_daily_timesheet"
+    #     ]
+    # }
 }
 
 # Testing

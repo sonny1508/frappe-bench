@@ -6,3 +6,4 @@
 # Patches added in this section will be executed after doctypes are migrated
 gs_customizations.patches.add_employee_checkin_field
 gs_customizations.patches.update_task_kanban_fields
+gs_customizations.patches.add_employee_matrix_field
