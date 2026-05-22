@@ -279,7 +279,7 @@ def custom_leave_application():
 				"is_system_generated": 0,
 				"label": "From Time",
 				"mandatory_depends_on": "eval:doc.custom_use_single_date == 1",
-				"read_only": 1,
+				"read_only": 0,
 			},
 			{
 				"depends_on": "eval:doc.custom_use_single_date == 1",
@@ -289,7 +289,7 @@ def custom_leave_application():
 				"is_system_generated": 0,
 				"label": "To Time",
 				"mandatory_depends_on": "eval:doc.custom_use_single_date == 1",
-				"read_only": 1,
+				"read_only": 0,
 			},
 			{
 				"fieldname": "custom_total_leave_time",
