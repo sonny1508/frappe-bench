@@ -586,11 +586,7 @@ def custom_task():
 				"is_system_generated": 0,
 				"label": "Utilization",
 				"read_only": 1,
-<<<<<<< HEAD
 			},				
-=======
-			},						
->>>>>>> 50817f145228a55dd85f479b79ba5573bea7228b
 		]
 	})
 
@@ -644,7 +640,6 @@ def property_task():
 		"1",
 		"Check"
 	),
-<<<<<<< HEAD
 	make_property_setter(
 		"Task",
 		"progress",
@@ -659,8 +654,6 @@ def property_task():
 		"1",
 		"Check",
 	),
-=======
->>>>>>> 50817f145228a55dd85f479b79ba5573bea7228b
 
 # =============== TASK TYPE DOCTYPE ===============
 
