@@ -441,12 +441,11 @@
                         
                         // Add data attribute for Task Type field
                         const isTaskType = field.fieldtype === "Link" && field.options === "Task Type";
-                        const inlineStyle = isTaskType ? '' : 'display: none;';
-                        
-                        const extraClass = field_name === "custom_utilization" ? "kanban-show-default" : "";
+                        const isUtilization = field_name === "custom_utilization";
+                        const inlineStyle = (isTaskType || isUtilization) ? '' : 'display: none;';
 
                         fields.push(`
-                            <div class="text-muted text-truncate ${extraClass}" style="${inlineStyle}">
+                            <div class="text-muted text-truncate" data-fieldname="${field_name}" style="${inlineStyle}">
                                 ${label}
                                 <span>${value}</span>
                             </div>
