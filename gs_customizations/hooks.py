@@ -223,7 +223,7 @@ doc_events = {
     "ToDo": {
         "before_insert": "gs_customizations.validate.permissions.block_assign",
         "after_insert": [
-            "gs_customizations.synology.synology.notify_todo_insert",
+            # "gs_customizations.synology.synology.notify_todo_insert",
             "gs_customizations.matrix.notifications.notify_todo_insert"
         ]
     },
@@ -236,7 +236,7 @@ doc_events = {
         "validate": "gs_customizations.overrides.erpnext.task.task.custom_validate",
         "on_change": "gs_customizations.overrides.erpnext.task.task.on_change",
         "on_update": [
-            "gs_customizations.synology.synology.notify_task_update",
+            # "gs_customizations.synology.synology.notify_task_update",
             "gs_customizations.matrix.notifications.notify_task_update"
         ],
     },
