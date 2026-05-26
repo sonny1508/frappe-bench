@@ -64,7 +64,7 @@ web_include_js = [
 ]
 
 app_include_css = [
-    "/assets/gs_customizations/css/kanban.css?v=19",
+    "/assets/gs_customizations/css/kanban.css?v=21",
     "/assets/gs_customizations/css/kanban_inline_edit.css?v=13",
     # "/assets/gs_customizations/css/kanban_collapsible.css",
 ]
@@ -75,7 +75,7 @@ app_include_js = [
     # "/assets/gs_customizations/js/kanban_collapsible.js",
     # "/assets/gs_customizations/js/kanban_filters.js",
 
-    "/assets/gs_customizations/js/kanban_customizations.js?v=32",
+    "/assets/gs_customizations/js/kanban_customizations.js?v=34",
     "/assets/gs_customizations/js/kanban_optimizations.js?v=14",
     "/assets/gs_customizations/js/list_view_customizations.js?v=02",
 

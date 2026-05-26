@@ -586,7 +586,7 @@ def custom_task():
 				"is_system_generated": 0,
 				"label": "Utilization",
 				"read_only": 1,
-			},						
+			},				
 		]
 	})
 
@@ -639,6 +639,20 @@ def property_task():
 		"hidden",
 		"1",
 		"Check"
+	),
+	make_property_setter(
+		"Task",
+		"progress",
+		"report_hide",
+		"1",
+		"Check",
+	),
+	make_property_setter(
+		"Task",
+		"progress",
+		"print_hide",
+		"1",
+		"Check",
 	),
 
 # =============== TASK TYPE DOCTYPE ===============

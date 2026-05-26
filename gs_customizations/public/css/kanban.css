@@ -119,8 +119,10 @@
     display: none !important;
 }
 
-/* Collapsed state - show only Task Type field */
-.kanban-card .kanban-card-doc > div:has(a[data-doctype="Task Type"]) {
+/* Collapsed state - show only Task Type and Utilization field */
+.kanban-card .kanban-card-doc > div:has(a[data-doctype="Task Type"]),
+.kanban-card .kanban-card-doc > div[data-fieldname="custom_utilization"]
+ {
     display: block !important;
 }
 
