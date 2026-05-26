@@ -30,6 +30,7 @@ status_map = {
     "Work From Home": "WFH",
     "On Leave (Paid)": "LP",
     "On Leave (Unpaid)": "LU",
+	"On Leave (Special)": "LS",
     "Holiday": "H",
     "Weekly Off": "WO",
 }
@@ -87,13 +88,14 @@ def get_message() -> str:
 		"red",        # Absent - A
 		"orange",     # HLP/A
 		"orange",     # HLU/A
-		"#914EE3",    # HLP/P
-		"#914EE3",    # HLU/P
+		"#914EE3",  # HLP/P
+		"#914EE3",  # HLU/P
 		"green",      # WFH
-		"#318AD8",    # LP
-		"#318AD8",    # LU
-		"#878787",    # H
-		"#878787",    # WO
+		"#318AD8",  # LP
+		"#318AD8",  # LU
+		"red", 		  # LS
+		"#878787",  # H
+		"#878787",  # WO
 	]
 
 	count = 0
@@ -366,6 +368,11 @@ def get_attendance_records(filters: Filters) -> list[dict]:
 			((Attendance.status == "On Leave") & (Attendance.leave_type == "Unpaid Time Off")),
 			"On Leave (Unpaid)",
 		)
+		# On Leave (Special)
+		.when(
+			((Attendance.status == "On Leave") & (Attendance.leave_type == "Special Time Off")),
+			"On Leave (Special)",
+		)
 		.else_(Attendance.status)
 	)
 	query = (
@@ -518,8 +525,9 @@ def get_rows(employee_details: dict, filters: Filters, holiday_map: dict, attend
 			# Calculate total_paid: total_present + Paid Time Off leave days
 			total_present = row.get("total_present", 0.0)
 			paid_time_off = row.get("paid_time_off", 0.0)
+			special_time_off = row.get("special_time_off", 0.0)
 			total_holidays = row.get("total_holidays", 0.0)
-			row["total_paid"] = total_present + paid_time_off + total_holidays
+			row["total_paid"] = total_present + paid_time_off + special_time_off + total_holidays
 
 			records.append(row)
 		else:
@@ -798,7 +806,7 @@ def get_chart_data(attendance_map: dict, filters: Filters) -> dict:
 			for __, attendance in attendance_dict.items():
 				attendance_on_day = attendance.get(getdate(day["fieldname"], parse_day_first=True))
 
-				if attendance_on_day in ["On Leave (Paid)", "On Leave (Unpaid)"]:
+				if attendance_on_day in ["On Leave (Paid)", "On Leave (Unpaid)", "On Leave (Special)"]:
 					# leave should be counted only once for the entire day
 					total_leaves_on_day += 1
 					break

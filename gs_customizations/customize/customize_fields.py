@@ -260,6 +260,7 @@ def custom_leave_application():
 				"insert_after": "section_break_5",
 				"is_system_generated": 0,
 				"label": "Use Hours In A Single Date",
+				"read_only_depends_on": "eval:doc.leave_type == 'Special Time Off'",
 			},
 			{
 				"depends_on": "eval:doc.custom_use_single_date",
