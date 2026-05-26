@@ -1,16 +1,14 @@
 /**
  * Kanban Customizations - Optimized & Consolidated
  * Combines: collapsible cards, inline editing, board filters, assignee name tags, scroll preservation
- * 
- * Performance fixes:
- * 1. Single MutationObserver with debouncing
- * 2. Targeted DOM observation (not document.body)
- * 3. Event listener cleanup on navigation
- * 4. WeakSet/WeakMap for processed element tracking
- * 5. RequestAnimationFrame for batch DOM updates
- * 6. Fixed double initialization of KanbanBoardCard override
- * 7. Added cleanup on route change
- * 8. Scroll position preservation on card drag/status change
+ *
+ * Render-path:
+ * - Inline-edit attrs and collapse toggle are baked into the KanbanBoardCard
+ *   template (no post-render scan, no MutationObserver).
+ * - board.fields normalized once per board (not per card).
+ * - docfield_map cached per card (not per field).
+ * - Field options loaded lazily on first dropdown open.
+ * - Toggle/expand/inline-edit/assign clicks are delegated.
  */
 
 (function() {
@@ -22,7 +20,6 @@
     
     const state = {
         initialized: false,
-        observer: null,
         themeObserver: null,
         appliedBoardFilter: null,
         routeListenerAttached: false,
@@ -30,14 +27,13 @@
         kanbanCardOverridden: false,
         pendingRouteTimeout: null,
         blockBoardSwitch: false,
-        originalFrappeCall: null, // Store original frappe.call for scroll preservation
+        originalFrappeCall: null,
+        boardFieldsNormalized: null, // Board name for which fields were already normalized
     };
 
-    // WeakSets to track processed elements (auto garbage-collected)
-    const processedCards = {
-        collapse: new WeakSet(),
-        inlineEdit: new WeakSet(),
-    };
+    // Cached icon HTML (avoids re-rendering SVG per card)
+    let ICON_EXPAND_HTML = "";
+    let ICON_COLLAPSE_HTML = "";
 
     // ==================== PRIORITY CONFIG ====================
 
@@ -285,96 +281,20 @@
     window.clearKanbanOptionsCache = clearOptionsCache;
 
 
-    // ==================== COLLAPSIBLE CARDS ====================
+    // ==================== BOARD FIELDS NORMALIZATION ====================
 
-    function enhanceCardCollapse(card) {
-        if (processedCards.collapse.has(card)) return;
-        processedCards.collapse.add(card);
+    // Reverse lookup: fieldname -> FIELD_CONFIG key (built once)
+    const FIELDNAME_TO_TYPE = Object.fromEntries(
+        Object.entries(FIELD_CONFIGS).map(([key, cfg]) => [cfg.fieldname, key])
+    );
 
-        const btn = document.createElement("button");
-        btn.className = "kanban-toggle-btn";
-        btn.title = "Toggle details";
-        btn.innerHTML = frappe.utils.icon("expand", "sm");
+    function normalizeBoardFields() {
+        const board = cur_list?.board;
+        if (!board?.fields) return;
+        if (state.boardFieldsNormalized === board.name) return;
 
-        const toggle = () => {
-            const expanded = card.classList.toggle("expanded");
-            btn.innerHTML = frappe.utils.icon(expanded ? "collapse" : "expand", "sm");
-        };
-
-        btn.addEventListener("click", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggle();
-        });
-
-        card.addEventListener("click", (e) => {
-            if (e.target.closest("a")) return;
-            if (card.classList.contains("expanded")) return;
-            e.preventDefault();
-            e.stopPropagation();
-            toggle();
-        });
-
-        card.appendChild(btn);
-    }
-
-    // ==================== INLINE EDIT ====================
-
-    function detectFieldType($div) {
-        const text = $div.text();
-        for (const [key, config] of Object.entries(FIELD_CONFIGS)) {
-            if (config.detectPatterns.some(pattern => text.includes(pattern))) {
-                return key;
-            }
-        }
-        return null;
-    }
-
-    function extractCurrentValue($div, fieldType) {
-        const config = FIELD_CONFIGS[fieldType];
-        const text = $div.text();
-
-        if (config.isNumeric) {
-            const match = text.match(/(\d+)[,.]?\d*/);
-            return match ? Math.round(parseInt(match[1], 10) / 10) * 10 : 0;
-        } else {
-            const colonIndex = text.indexOf(":");
-            return colonIndex !== -1 ? text.substring(colonIndex + 1).trim() : text.trim();
-        }
-    }
-
-    function enhanceCardInlineEdit($wrapper) {
-        const wrapperEl = $wrapper[0];
-        if (processedCards.inlineEdit.has(wrapperEl)) return;
-        processedCards.inlineEdit.add(wrapperEl);
-
-        // Try to get docname from wrapper or inner card
-        let docname = $wrapper.attr("data-name") || "";
-        if (!docname) {
-            const $innerCard = $wrapper.find(".kanban-card");
-            docname = $innerCard.attr("data-name") || "";
-        }
-        docname = decodeURIComponent(docname);
-        if (!docname) return;
-
-        const $docContent = $wrapper.find(".kanban-card-doc");
-        if (!$docContent.length) return;
-
-        $docContent.children("div").each(function() {
-            const $div = $(this);
-            const fieldType = detectFieldType($div);
-            if (!fieldType || !canEditField(fieldType)) return;
-
-            const config = FIELD_CONFIGS[fieldType];
-            const currentValue = extractCurrentValue($div, fieldType);
-
-            $div.addClass("kanban-inline-editable")
-                .attr("data-field-type", fieldType)
-                .attr("data-fieldname", config.fieldname)
-                .attr("data-docname", docname)
-                .attr("data-current-value", currentValue)
-                .attr("title", `Click to edit ${config.label}`);
-        });
+        board.fields = board.fields.map(f => f === "progress" ? "custom_utilization" : f);
+        state.boardFieldsNormalized = board.name;
     }
 
     // ==================== ASSIGNEE NAMES ====================
@@ -418,38 +338,53 @@
 
                     self.$card = $(frappe.render_template("kanban_card", opts)).appendTo(wrapper);
 
+                    // Bake in the collapse toggle button (no per-card listener needed; delegated)
+                    self.$card.find(".kanban-card").append(
+                        `<button class="kanban-toggle-btn" title="Toggle details">${ICON_EXPAND_HTML}</button>`
+                    );
+
                     if (!frappe.model.can_write(card.doctype)) {
                         self.$card.find(".kanban-card-body").css("cursor", "default");
                     }
                 }
 
                 function get_doc_content(card) {
+                    // Cache docfield_map lookup once per card (not per field)
+                    const docfields = frappe.meta.docfield_map[card.doctype] || {};
+                    const showLabels = cur_list.board.show_labels;
+                    const docname = card.name;
                     let fields = [];
 
-                    cur_list.board.fields = cur_list.board.fields.map(f =>
-                        f === "progress" ? "custom_utilization" : f
-                    );
-
                     for (let field_name of cur_list.board.fields) {
-                        let field =
-                            frappe.meta.docfield_map[card.doctype]?.[field_name] ||
-                            frappe.model.get_std_field(field_name);
-                        let label = cur_list.board.show_labels
+                        let field = docfields[field_name] || frappe.model.get_std_field(field_name);
+                        let label = showLabels
                             ? `<span>${__(field.label, null, field.parent)}: </span>`
                             : "";
                         let value = frappe.format(card.doc[field_name], field);
-                        
-                        // Add data attribute for Task Type field
+
                         const isTaskType = field.fieldtype === "Link" && field.options === "Task Type";
                         const isUtilization = field_name === "custom_utilization";
                         const inlineStyle = (isTaskType || isUtilization) ? '' : 'display: none;';
 
-                        fields.push(`
-                            <div class="text-muted text-truncate" data-fieldname="${field_name}" style="${inlineStyle}">
-                                ${label}
-                                <span>${value}</span>
-                            </div>
-                        `);
+                        // Bake inline-edit data attrs directly into the template
+                        const fieldType = FIELDNAME_TO_TYPE[field_name];
+                        let editableAttrs = "";
+                        let editableClass = "";
+                        if (fieldType && canEditField(fieldType)) {
+                            const cfg = FIELD_CONFIGS[fieldType];
+                            const rawVal = card.doc[field_name];
+                            const currentValue = (rawVal === null || rawVal === undefined) ? "" : rawVal;
+                            editableClass = " kanban-inline-editable";
+                            editableAttrs =
+                                ` data-field-type="${fieldType}"` +
+                                ` data-docname="${frappe.utils.escape_html(docname)}"` +
+                                ` data-current-value="${frappe.utils.escape_html(String(currentValue))}"` +
+                                ` title="Click to edit ${cfg.label}"`;
+                        }
+
+                        fields.push(
+                            `<div class="text-muted text-truncate${editableClass}" data-fieldname="${field_name}"${editableAttrs} style="${inlineStyle}">${label}<span>${value}</span></div>`
+                        );
                     }
                     return fields.join("");
                 }
@@ -724,8 +659,9 @@
         if (cur_list?.board?.fields) {
             cur_list.board.fields = ["status", "type", "custom_utilization"];
         }
+        normalizeBoardFields();
         const boardName = board?.name;
-        
+
         if (!boardName || state.appliedBoardFilter === boardName) return;
         if (!board?.filters) return;
 
@@ -743,79 +679,6 @@
         cur_list.filter_area.add(filters.map(f => [f[0], f[1], f[2], f[3]]));
     }
 
-    // ==================== UNIFIED CARD PROCESSING ====================
-
-    // Debounced function to process all new cards
-    const processNewCards = debounce(() => {
-        if (!isKanbanView()) return;
-
-        // Collapsible uses .kanban-card
-        const cards = document.querySelectorAll(".kanban-card");
-        cards.forEach(card => {
-            enhanceCardCollapse(card);
-        });
-
-        // Inline edit uses .kanban-card-wrapper
-        const cardWrappers = document.querySelectorAll(".kanban-card-wrapper");
-        cardWrappers.forEach(wrapper => {
-            const $wrapper = $(wrapper);
-            enhanceCardInlineEdit($wrapper);
-        });
-    }, 100); // 100ms debounce - prevents rapid-fire processing
-
-    // ==================== OBSERVER SETUP ====================
-
-    function setupObserver() {
-        if (state.observer) {
-            state.observer.disconnect();
-        }
-
-        state.observer = new MutationObserver((mutations) => {
-            // Early exit if not on kanban view
-            if (!isKanbanView()) return;
-
-            // Check if any mutations involve kanban cards
-            let hasRelevantChanges = false;
-            for (const mutation of mutations) {
-                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                    // Check added nodes for kanban content
-                    for (const node of mutation.addedNodes) {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            // Skip nodes we add ourselves (toggle buttons, dropdowns)
-                            if (node.classList?.contains('kanban-toggle-btn') ||
-                                node.classList?.contains('kanban-inline-dropdown')) {
-                                continue;
-                            }
-                            
-                            if (node.classList?.contains('kanban-card') ||
-                                node.classList?.contains('kanban-card-wrapper') ||
-                                node.classList?.contains('kanban-column') ||
-                                node.querySelector?.('.kanban-card-wrapper')) {
-                                hasRelevantChanges = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (hasRelevantChanges) break;
-            }
-
-            if (hasRelevantChanges) {
-                processNewCards();
-            }
-        });
-
-        // Observe only the main content area, not the entire body
-        const targetNode = document.querySelector('.frappe-list') || 
-                          document.querySelector('[data-page-container]') ||
-                          document.body;
-
-        state.observer.observe(targetNode, {
-            childList: true,
-            subtree: true
-        });
-    }
-
     // ==================== ROUTE CHANGE HANDLING ====================
 
     function onRouteChange() {
@@ -828,21 +691,18 @@
         // Small delay to let Frappe set up cur_list
         state.pendingRouteTimeout = setTimeout(() => {
             state.pendingRouteTimeout = null;
-            
+
             if (isKanbanView()) {
-                // Wait for any pending AJAX to complete
                 if (cur_list?.$result?.hasClass('loading')) {
-                    // Still loading, try again
                     state.pendingRouteTimeout = setTimeout(onRouteChange, 100);
                     return;
                 }
 
-                preloadOptions();
                 applyBoardFilters();
-                processNewCards();
                 patchFrappeCallForScrollPreservation();
             } else {
                 state.appliedBoardFilter = null;
+                state.boardFieldsNormalized = null;
             }
         }, 250);
     }
@@ -868,10 +728,6 @@
     // ==================== CLEANUP ====================
     
     function cleanup() {
-        if (state.observer) {
-            state.observer.disconnect();
-            state.observer = null;
-        }
         if (state.themeObserver) {
             state.themeObserver.disconnect();
             state.themeObserver = null;
@@ -883,16 +739,16 @@
 
         unpatchFrappeCall();
 
-        processedCards.collapse = new WeakSet();
-        processedCards.inlineEdit = new WeakSet();
-
         Object.keys(optionsCache).forEach(key => delete optionsCache[key]);
 
         $(document).off("click.kanbanInlineEdit");
+        $(document).off("click.kanbanToggle");
+        $(document).off("click.kanbanCardExpand");
         $(document).off("page-change.kanbanCustom");
         state.routeListenerAttached = false;
         state.initialized = false;
         state.kanbanCardOverridden = false;
+        state.boardFieldsNormalized = null;
     }
     
     // Expose cleanup for debugging/testing
@@ -903,30 +759,50 @@
     function init() {
         if (state.initialized) return;
         state.initialized = true;
-        
+
         initPermissions();
         setupThemeListener();
-        setupObserver();
         patchFrappeCallForScrollPreservation();
+
+        // Cache icon HTML once (avoid re-rendering SVG per card)
+        ICON_EXPAND_HTML = frappe.utils.icon("expand", "sm");
+        ICON_COLLAPSE_HTML = frappe.utils.icon("collapse", "sm");
 
         // Set up route listener once
         if (!state.routeListenerAttached) {
             state.routeListenerAttached = true;
-            
-            // Use frappe's page-change event
+
             $(document).on("page-change.kanbanCustom", onRouteChange);
-            
-            // Handle initial load with delay (cur_list needs time to populate)
+
             state.pendingRouteTimeout = setTimeout(() => {
                 state.pendingRouteTimeout = null;
                 if (isKanbanView()) {
-                    preloadOptions();
                     applyBoardFilters();
-                    processNewCards();
                 }
             }, 200);
         }
 
+        // Delegated toggle button click (replaces per-card listener)
+        $(document).off("click.kanbanToggle").on("click.kanbanToggle", ".kanban-toggle-btn", function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const $card = $(this).closest(".kanban-card");
+            const expanded = $card.toggleClass("expanded").hasClass("expanded");
+            this.innerHTML = expanded ? ICON_COLLAPSE_HTML : ICON_EXPAND_HTML;
+        });
+
+        // Delegated expand-on-card-click (skips links, inline edits, and the toggle itself)
+        $(document).off("click.kanbanCardExpand").on("click.kanbanCardExpand", ".kanban-card", function(e) {
+            if (e.target.closest("a")) return;
+            if (e.target.closest(".kanban-toggle-btn")) return;
+            if (e.target.closest(".kanban-inline-editable")) return;
+            if (this.classList.contains("expanded")) return;
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.add("expanded");
+            const btn = this.querySelector(".kanban-toggle-btn");
+            if (btn) btn.innerHTML = ICON_COLLAPSE_HTML;
+        });
 
         // Single delegated listener for all assign buttons - replaces per-card listeners
         $(document).off("click.kanbanAssign").on("click.kanbanAssign", ".kanban-add-assignment", function(e) {

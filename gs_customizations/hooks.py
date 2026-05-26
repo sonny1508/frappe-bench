@@ -64,14 +64,14 @@ web_include_js = [
 ]
 
 app_include_css = [
-    "/assets/gs_customizations/css/kanban.css?v=21",
-    "/assets/gs_customizations/css/kanban_inline_edit.css?v=13",
-    # "/assets/gs_customizations/css/kanban_collapsible.css",
+    "/assets/gs_customizations/css/kanban/kanban.css?v=02",
+    "/assets/gs_customizations/css/kanban/kanban_inline_edit.css?v=02",
 ]
 
 app_include_js = [
-    "/assets/gs_customizations/js/kanban/kanban_customizations.js?v=1",
-    "/assets/gs_customizations/js/kanban/kanban_optimizations.js?v=1",
+    "/assets/gs_customizations/js/kanban/kanban_customizations.js?v=02",
+    "/assets/gs_customizations/js/kanban/kanban_optimizations.js?v=02",
+
     "/assets/gs_customizations/js/list_view_customizations.js?v=02",
 
     "/assets/gs_customizations/js/erpnext/task/task.js?v=02",
