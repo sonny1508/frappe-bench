@@ -137,6 +137,7 @@ doctype_list_js = {
 # after_install = "gs_customizations.install.after_install"
 
 after_install = "gs_customizations.install.after_install"
+after_migrate = "gs_customizations.install.after_install"
 
 # Uninstallation
 # ------------
@@ -246,7 +247,8 @@ doc_events = {
     "Timesheet": {
         "validate": [
             "gs_customizations.overrides.erpnext.timesheet.timesheet.update_completed_from_task",
-            "gs_customizations.overrides.erpnext.timesheet.timesheet.clear_free_activity_fields"
+            "gs_customizations.overrides.erpnext.timesheet.timesheet.clear_free_activity_fields",
+            "gs_customizations.overrides.erpnext.timesheet.timesheet.validate_timesheet_rules",
         ]
     },
     # Currently not working for some reason

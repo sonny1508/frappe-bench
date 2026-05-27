@@ -11,6 +11,7 @@ def apply_custom_fields():
 
 	custom_employee()
 	custom_task()
+	custom_timesheet()
 
 def apply_custom_properties():
 	property_company()
@@ -669,7 +670,20 @@ def property_task_type():
 
 # =============== TIMESHEET DOCTYPE ===============
 
-def property_timesheet():	
+def custom_timesheet():
+	create_custom_fields({
+		"Timesheet": [
+			{
+				"fieldname": "custom_daily_hours_summary",
+				"fieldtype": "HTML",
+				"insert_after": "total_hours",
+				"is_system_generated": 0,
+				"label": "Daily Hours Summary",
+			},
+		]
+	})
+
+def property_timesheet():
 	make_property_setter(
 		"Timesheet",
 		"end_date",
