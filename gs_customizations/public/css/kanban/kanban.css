@@ -103,6 +103,9 @@
     flex: 0 0 300px !important;
     min-width: 300px !important;
     max-width: 300px !important;
+    /* Skip layout/paint for off-screen columns until they scroll into view */
+    content-visibility: auto;
+    contain-intrinsic-size: 300px 800px;
 }
 
 /* ========================================

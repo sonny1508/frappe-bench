@@ -64,19 +64,14 @@ web_include_js = [
 ]
 
 app_include_css = [
-    "/assets/gs_customizations/css/kanban.css?v=23",
-    "/assets/gs_customizations/css/kanban_inline_edit.css?v=13",
-    # "/assets/gs_customizations/css/kanban_collapsible.css",
+    "/assets/gs_customizations/css/kanban/kanban.css?v=02",
+    "/assets/gs_customizations/css/kanban/kanban_inline_edit.css?v=02",
 ]
 
 app_include_js = [
-    # "/assets/gs_customizations/js/kanban.js",
-    # "/assets/gs_customizations/js/kanban_inline_edit.js",
-    # "/assets/gs_customizations/js/kanban_collapsible.js",
-    # "/assets/gs_customizations/js/kanban_filters.js",
+    "/assets/gs_customizations/js/kanban/kanban_customizations.js?v=02",
+    "/assets/gs_customizations/js/kanban/kanban_optimizations.js?v=02",
 
-    "/assets/gs_customizations/js/kanban_customizations.js?v=34",
-    "/assets/gs_customizations/js/kanban_optimizations.js?v=14",
     "/assets/gs_customizations/js/list_view_customizations.js?v=02",
 
     "/assets/gs_customizations/js/erpnext/task/task.js?v=02",
@@ -142,6 +137,7 @@ doctype_list_js = {
 # after_install = "gs_customizations.install.after_install"
 
 after_install = "gs_customizations.install.after_install"
+after_migrate = "gs_customizations.install.after_install"
 
 # Uninstallation
 # ------------
@@ -228,7 +224,7 @@ doc_events = {
     "ToDo": {
         "before_insert": "gs_customizations.validate.permissions.block_assign",
         "after_insert": [
-            "gs_customizations.synology.synology.notify_todo_insert",
+            # "gs_customizations.synology.synology.notify_todo_insert",
             "gs_customizations.matrix.notifications.notify_todo_insert"
         ]
     },
@@ -241,7 +237,7 @@ doc_events = {
         "validate": "gs_customizations.overrides.erpnext.task.task.custom_validate",
         "on_change": "gs_customizations.overrides.erpnext.task.task.on_change",
         "on_update": [
-            "gs_customizations.synology.synology.notify_task_update",
+            # "gs_customizations.synology.synology.notify_task_update",
             "gs_customizations.matrix.notifications.notify_task_update"
         ],
     },
@@ -251,7 +247,8 @@ doc_events = {
     "Timesheet": {
         "validate": [
             "gs_customizations.overrides.erpnext.timesheet.timesheet.update_completed_from_task",
-            "gs_customizations.overrides.erpnext.timesheet.timesheet.clear_free_activity_fields"
+            "gs_customizations.overrides.erpnext.timesheet.timesheet.clear_free_activity_fields",
+            "gs_customizations.overrides.erpnext.timesheet.timesheet.validate_timesheet_rules",
         ]
     },
     # Currently not working for some reason

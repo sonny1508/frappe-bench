@@ -6,9 +6,7 @@ frappe.ui.form.on("Timesheet", {
 
 		frm.fields_dict.employee.get_query = function () {
 			return {
-				filters: {
-					status: "Active",
-				},
+				filters: { status: "Active" },
 			};
 		};
 
@@ -18,33 +16,49 @@ frappe.ui.form.on("Timesheet", {
 				filters: {
 					project: child.project,
 					status: ["!=", "Cancelled"],
-					// is_group: 0,
 				},
 			};
 		};
 
 		frm.fields_dict["time_logs"].grid.get_field("project").get_query = function () {
 			return {
-				filters: {
-					company: frm.doc.company,
-				},
+				filters: { company: frm.doc.company },
 			};
 		};
+
+		frm._ts_ctx = null;
+	},
+
+	refresh: function (frm) {
+		if (frm.doc.employee && frm.doc.company && !frm._ts_ctx) {
+			_fetch_validation_context(frm);
+		} else {
+			_render_daily_summary(frm);
+		}
+	},
+
+	employee: function (frm) {
+		if (frm.doc.employee && frm.doc.company) {
+			_fetch_validation_context(frm);
+		}
+	},
+
+	validate: function (frm) {
+		_validate_all_rules(frm);
+	},
+
+	time_logs_remove: function (frm) {
+		_render_daily_summary(frm);
 	},
 
 	after_save: function (frm) {
-		// Refresh the Timesheet Check-in status in frappe.boot so the
-		// enforcer JS picks up the change without a full page reload.
 		if (!frappe.boot || !frappe.boot.timesheet_checkin) return;
-		// Only bother calling if the feature is enabled for this user
-		// (otherwise enforce will always be false and this is a waste).
 		if (
 			frappe.boot.timesheet_checkin.employee == null &&
 			frappe.boot.timesheet_checkin.enforce === false
 		) {
 			return;
 		}
-		// Match the checkin page's logic: only include today if past EOD
 		var include_today = 0;
 		var checkin = frappe.boot.timesheet_checkin;
 		if (checkin && checkin.end_working_hour) {
@@ -64,5 +78,387 @@ frappe.ui.form.on("Timesheet", {
 				}
 			},
 		});
-	}
+	},
 });
+
+// ---- Timesheet Detail child table events ----
+
+frappe.ui.form.on("Timesheet Detail", {
+	time_logs_add: function (frm, cdt, cdn) {
+		_auto_set_from_time(frm, cdt, cdn);
+		_render_daily_summary(frm);
+	},
+
+	from_time: function (frm, cdt, cdn) {
+		_validate_row_date_range(frm, cdt, cdn);
+		_validate_row_leave_block(frm, cdt, cdn);
+		_render_daily_summary(frm);
+	},
+
+	hours: function (frm, cdt, cdn) {
+		_validate_next_day_overflow(frm, cdt, cdn);
+		_validate_daily_hours_for_date(frm, cdt, cdn);
+		_render_daily_summary(frm);
+	},
+
+	activity_type: function (frm, cdt, cdn) {
+		_toggle_free_fields(frm, cdt, cdn);
+	},
+
+	form_render: function (frm, cdt, cdn) {
+		_toggle_free_fields(frm, cdt, cdn);
+	},
+});
+
+// ---- Fetch validation context from server ----
+
+function _fetch_validation_context(frm) {
+	frappe.call({
+		method: "gs_customizations.overrides.erpnext.timesheet.timesheet.get_timesheet_validation_context",
+		args: { employee: frm.doc.employee, company: frm.doc.company },
+		callback: function (r) {
+			if (r && r.message) {
+				frm._ts_ctx = r.message;
+				_render_daily_summary(frm);
+			}
+		},
+	});
+}
+
+// ---- Rule 4: Auto-set from_time on new row ----
+
+function _auto_set_from_time(frm, cdt, cdn) {
+	if (!frm._ts_ctx) return;
+
+	var row = locals[cdt][cdn];
+	var start_time = frm._ts_ctx.start_working_hour || "09:00:00";
+	var existing = (frm.doc.time_logs || []).filter(function (r) {
+		return r.name !== row.name && r.from_time;
+	});
+
+	var new_from_time;
+	if (existing.length > 0) {
+		var last = existing[existing.length - 1];
+		if (last.to_time) {
+			new_from_time = last.to_time;
+		} else {
+			var last_date = last.from_time.split(" ")[0];
+			new_from_time = last_date + " " + start_time;
+		}
+	} else {
+		new_from_time = frappe.datetime.get_today() + " " + start_time;
+	}
+
+	var target_date = new_from_time.split(" ")[0];
+	var leave_hours = frm._ts_ctx.leave_data[target_date] || 0;
+	if (leave_hours >= frm._ts_ctx.company_working_hours) {
+		return;
+	}
+
+	frappe.model.set_value(cdt, cdn, "from_time", new_from_time);
+}
+
+// ---- Rule 3: Date range check (±4 calendar days) ----
+
+function _validate_row_date_range(frm, cdt, cdn) {
+	var row = locals[cdt][cdn];
+	if (!row.from_time) return;
+
+	var row_date = row.from_time.split(" ")[0];
+	var today = frappe.datetime.get_today();
+	var diff = frappe.datetime.get_diff(row_date, today);
+
+	if (Math.abs(diff) > 4) {
+		frappe.msgprint({
+			title: __("Invalid Date"),
+			indicator: "red",
+			message: __(
+				"Row {0}: Date {1} is more than 4 days from today. Please choose a date within ±4 days.",
+				[row.idx, row_date]
+			),
+		});
+		frappe.model.set_value(cdt, cdn, "from_time", "");
+	}
+}
+
+// ---- Rule 2: Full-day leave blocks entry ----
+
+function _validate_row_leave_block(frm, cdt, cdn) {
+	if (!frm._ts_ctx) return;
+
+	var row = locals[cdt][cdn];
+	if (!row.from_time) return;
+
+	var row_date = row.from_time.split(" ")[0];
+	var leave_hours = frm._ts_ctx.leave_data[row_date];
+	if (leave_hours === undefined) return;
+
+	if (leave_hours >= frm._ts_ctx.company_working_hours) {
+		frappe.msgprint({
+			title: __("Full-Day Leave"),
+			indicator: "red",
+			message: __(
+				"You have a full-day leave on {0}. You cannot log timesheet hours on this date.",
+				[row_date]
+			),
+		});
+		frappe.model.set_value(cdt, cdn, "from_time", "");
+	}
+}
+
+// ---- Next-day overflow check ----
+
+function _validate_next_day_overflow(frm, cdt, cdn) {
+	var row = locals[cdt][cdn];
+	if (!row.from_time || !row.hours) return;
+
+	var from_m = moment(row.from_time);
+	var to_m = from_m.clone().add(row.hours, "hours");
+
+	if (from_m.format("YYYY-MM-DD") !== to_m.format("YYYY-MM-DD")) {
+		frappe.msgprint({
+			title: __("Hours Overflow"),
+			indicator: "orange",
+			message: __(
+				"Row {0}: Working hours exceed into the next day. " +
+					"Start time {1} plus {2}h goes past midnight. " +
+					"Please reduce the hours or adjust the start time.",
+				[row.idx, from_m.format("HH:mm"), row.hours]
+			),
+		});
+	}
+}
+
+// ---- Rules 1 & 2: Daily hours check on hours change ----
+
+function _validate_daily_hours_for_date(frm, cdt, cdn) {
+	if (!frm._ts_ctx) return;
+
+	var row = locals[cdt][cdn];
+	if (!row.from_time || !row.hours) return;
+
+	var row_date = row.from_time.split(" ")[0];
+
+	var total = 0;
+	(frm.doc.time_logs || []).forEach(function (r) {
+		if (r.from_time && r.from_time.split(" ")[0] === row_date) {
+			total += flt(r.hours);
+		}
+	});
+
+	var leave_hours = frm._ts_ctx.leave_data[row_date] || 0;
+	var max_hours = frm._ts_ctx.company_working_hours - leave_hours;
+
+	if (total > max_hours + 0.01) {
+		var msg;
+		if (leave_hours > 0) {
+			msg = __(
+				"Total hours on {0} is {1}h, but the maximum allowed is {2}h ({3}h working hours minus {4}h leave).",
+				[
+					row_date,
+					total.toFixed(2),
+					max_hours.toFixed(2),
+					frm._ts_ctx.company_working_hours.toFixed(2),
+					leave_hours.toFixed(2),
+				]
+			);
+		} else {
+			msg = __(
+				"Total hours on {0} is {1}h, which exceeds the maximum working hours of {2}h.",
+				[row_date, total.toFixed(2), frm._ts_ctx.company_working_hours.toFixed(2)]
+			);
+		}
+		frappe.msgprint({ title: __("Hours Exceeded"), indicator: "orange", message: msg });
+	}
+}
+
+// ---- Validate all rules on save ----
+
+function _validate_all_rules(frm) {
+	var today = frappe.datetime.get_today();
+	var date_hours = {};
+	var valid = true;
+
+	(frm.doc.time_logs || []).forEach(function (row) {
+		if (!valid) return;
+		if (!row.from_time) return;
+
+		var row_date = row.from_time.split(" ")[0];
+		var diff = frappe.datetime.get_diff(row_date, today);
+
+		// Rule 3: ±4 calendar days
+		if (Math.abs(diff) > 4) {
+			frappe.msgprint({
+				title: __("Invalid Date"),
+				indicator: "red",
+				message: __(
+					"Row {0}: Date {1} is more than 4 days from today. You can only log time within ±4 calendar days.",
+					[row.idx, row_date]
+				),
+			});
+			valid = false;
+			return;
+		}
+
+		// Next-day overflow
+		if (row.hours) {
+			var from_m = moment(row.from_time);
+			var to_m = from_m.clone().add(row.hours, "hours");
+			if (from_m.format("YYYY-MM-DD") !== to_m.format("YYYY-MM-DD")) {
+				frappe.msgprint({
+					title: __("Hours Overflow"),
+					indicator: "red",
+					message: __(
+						"Row {0}: Working hours exceed into the next day. " +
+							"Start time {1} plus {2}h goes past midnight.",
+						[row.idx, from_m.format("HH:mm"), row.hours]
+					),
+				});
+				valid = false;
+				return;
+			}
+		}
+
+		date_hours[row_date] = (date_hours[row_date] || 0) + flt(row.hours);
+	});
+
+	if (!valid) {
+		frappe.validated = false;
+		return;
+	}
+
+	// Rules 1 & 2 need context
+	if (!frm._ts_ctx) return;
+
+	for (var date_str in date_hours) {
+		var total = date_hours[date_str];
+		var leave_hours = frm._ts_ctx.leave_data[date_str] || 0;
+
+		if (leave_hours >= frm._ts_ctx.company_working_hours) {
+			frappe.msgprint({
+				title: __("Full-Day Leave"),
+				indicator: "red",
+				message: __(
+					"You have a full-day leave on {0}. You cannot log timesheet hours on this date.",
+					[date_str]
+				),
+			});
+			frappe.validated = false;
+			return;
+		}
+
+		var max_hours = frm._ts_ctx.company_working_hours - leave_hours;
+		if (total > max_hours + 0.01) {
+			var msg;
+			if (leave_hours > 0) {
+				msg = __(
+					"Total hours on {0} is {1}h, but the maximum allowed is {2}h ({3}h working hours minus {4}h leave).",
+					[
+						date_str,
+						total.toFixed(2),
+						max_hours.toFixed(2),
+						frm._ts_ctx.company_working_hours.toFixed(2),
+						leave_hours.toFixed(2),
+					]
+				);
+			} else {
+				msg = __(
+					"Total hours on {0} is {1}h, which exceeds the maximum working hours of {2}h.",
+					[date_str, total.toFixed(2), frm._ts_ctx.company_working_hours.toFixed(2)]
+				);
+			}
+			frappe.msgprint({ title: __("Hours Exceeded"), indicator: "red", message: msg });
+			frappe.validated = false;
+			return;
+		}
+	}
+}
+
+// ---- Daily Hours Summary rendering ----
+
+function _render_daily_summary(frm) {
+	var wrapper = frm.fields_dict.custom_daily_hours_summary;
+	if (!wrapper || !wrapper.$wrapper) return;
+
+	var date_hours = {};
+	(frm.doc.time_logs || []).forEach(function (row) {
+		if (!row.from_time) return;
+		var date = row.from_time.split(" ")[0];
+		date_hours[date] = (date_hours[date] || 0) + flt(row.hours);
+	});
+
+	var dates = Object.keys(date_hours).sort();
+	if (!dates.length) {
+		wrapper.$wrapper.html("");
+		return;
+	}
+
+	var has_ctx = !!frm._ts_ctx;
+	var grand_total = 0;
+
+	var rows_html = "";
+	dates.forEach(function (date) {
+		var day_name = moment(date).format("dddd");
+		var logged = date_hours[date];
+		grand_total += logged;
+
+		var leave = has_ctx ? (frm._ts_ctx.leave_data[date] || 0) : 0;
+		var max_raw = has_ctx ? frm._ts_ctx.company_working_hours : 0;
+		var available = has_ctx ? max_raw - leave : 0;
+
+		var available_display = has_ctx ? available.toFixed(0) + "h" : "—";
+		if (has_ctx && leave > 0) {
+			available_display += " <span class='text-muted'>(" + leave.toFixed(0) + "h leave)</span>";
+		}
+
+		var row_style = "";
+		if (has_ctx && logged > available + 0.01) {
+			row_style = ' style="color: var(--red-500);"';
+		}
+
+		rows_html +=
+			"<tr" + row_style + ">" +
+			"<td>" + date + "</td>" +
+			"<td>" + day_name + "</td>" +
+			"<td class='text-right'>" + logged.toFixed(0) + "h</td>" +
+			"<td class='text-right'>" + available_display + "</td>" +
+			"</tr>";
+	});
+
+	var html =
+		'<div style="margin: 10px 0 15px;">' +
+		'<h5 class="text-muted" style="margin-bottom: 0px;">' + __("Daily Hours Summary") + "</h5>" +
+		'<table class="table table-bordered" style="max-width: 840px; font-size: 14px; margin-bottom: 0;">' +
+		"<thead>" +
+		'<tr style="background: var(--subtle-fg);">' +
+		"<th>" + __("Date") + "</th>" +
+		"<th>" + __("Day") + "</th>" +
+		'<th class="text-right">' + __("Logged") + "</th>" +
+		'<th class="text-right">' + __("Available") + "</th>" +
+		"</tr>" +
+		"</thead>" +
+		"<tbody>" + rows_html + "</tbody>" +
+		"<tfoot>" +
+		'<tr style="font-weight: bold;">' +
+		'<td colspan="2">' + __("Total") + "</td>" +
+		'<td class="text-right">' + grand_total.toFixed(0) + "h</td>" +
+		"<td></td>" +
+		"</tr>" +
+		"</tfoot>" +
+		"</table>" +
+		"</div>";
+
+	wrapper.$wrapper.html(html);
+}
+
+// ---- Toggle read-only on project/task fields for Free/Documents activity ----
+
+function _toggle_free_fields(frm, cdt, cdn) {
+	var row = locals[cdt][cdn];
+	var is_free = row.activity_type === "Free";
+	var fields = ["project", "project_name", "task", "custom_task_name", "custom_task_type"];
+	fields.forEach(function (field) {
+		frappe.meta.get_docfield("Timesheet Detail", field, cdn).read_only = is_free ? 1 : 0;
+	});
+	frm.refresh_field("time_logs");
+}

@@ -147,7 +147,7 @@ frappe.query_reports["GS PTO Sheet"] = {
                     value = "<span style='color:green'>" + value + "</span>";
                 else if (value == "A") 
                     value = "<span style='color:red'>" + value + "</span>";
-                else if (value == "LP" || value == "LU") 
+                else if (value == "LP" || value == "LU" || value == "LS") 
                     value = "<span style='color:#318AD8'>" + value + "</span>";
                 else if (value == "HLP/A" || value == "HLU/A")
                     value = "<span style='color:orange'>" + value + "</span>";
