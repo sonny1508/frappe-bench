@@ -69,8 +69,9 @@ app_include_css = [
 ]
 
 app_include_js = [
-    "/assets/gs_customizations/js/kanban/kanban_customizations.js?v=02",
+    "/assets/gs_customizations/js/kanban/kanban_customizations.js?v=03",
     "/assets/gs_customizations/js/kanban/kanban_optimizations.js?v=02",
+    "/assets/gs_customizations/js/kanban/kanban_util.js?v=01",
 
     "/assets/gs_customizations/js/list_view_customizations.js?v=02",
 

@@ -97,8 +97,7 @@
 [data-page-route^="List/Task/Kanban"] .kanban {
     display: flex !important;
     flex-wrap: nowrap !important;
-    /* disable click and dragging */
-    /* min-width: max-content !important; */
+    min-width: max-content !important;
 }
 
 [data-page-route^="List/Task/Kanban"] .kanban-column {
