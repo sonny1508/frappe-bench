@@ -49,40 +49,38 @@
 /* ========================================
    KANBAN HORIZONTAL SCROLLBAR
    ======================================== */
-/* Lock the page body to viewport */
-/* Scope everything to Task Kanban view only */
-[data-page-route^="List/Task/Kanban"] .page-body.full-width,
-.page-body.full-width:has([data-page-route^="List/Task/Kanban"]) {
+/* Scope everything to Task Kanban view only via body[data-route] */
+body[data-route^="List/Task/Kanban"] .page-body.full-width {
     max-width: 100vw !important;
     overflow-x: clip !important;
 }
 
-[data-page-route^="List/Task/Kanban"] .page-content {
+body[data-route^="List/Task/Kanban"] .page-content {
     max-width: 100% !important;
     overflow-x: clip !important;
 }
 
-[data-page-route^="List/Task/Kanban"] .layout-main {
+body[data-route^="List/Task/Kanban"] .layout-main {
     max-width: 100% !important;
     overflow-x: clip !important;
 }
 
-[data-page-route^="List/Task/Kanban"] .layout-main-section-wrapper {
+body[data-route^="List/Task/Kanban"] .layout-main-section-wrapper {
     max-width: calc(100vw - 50px) !important;
     overflow-x: clip !important;
 }
 
-[data-page-route^="List/Task/Kanban"] .layout-main-section {
+body[data-route^="List/Task/Kanban"] .layout-main-section {
     max-width: 100% !important;
     overflow-x: clip !important;
 }
 
-[data-page-route^="List/Task/Kanban"] .frappe-list {
+body[data-route^="List/Task/Kanban"] .frappe-list {
     max-width: 100% !important;
     overflow-x: clip !important;
 }
 
-[data-page-route^="List/Task/Kanban"] .frappe-list .result {
+body[data-route^="List/Task/Kanban"] .frappe-list .result {
     max-width: 100% !important;
     overflow-x: auto !important;
     overflow-y: visible !important;
@@ -90,17 +88,17 @@
     cursor: grab;
 }
 
-[data-page-route^="List/Task/Kanban"] .frappe-list .result:active {
+body[data-route^="List/Task/Kanban"] .frappe-list .result:active {
     cursor: grabbing;
 }
 
-[data-page-route^="List/Task/Kanban"] .kanban {
+body[data-route^="List/Task/Kanban"] .kanban {
     display: flex !important;
     flex-wrap: nowrap !important;
     min-width: max-content !important;
 }
 
-[data-page-route^="List/Task/Kanban"] .kanban-column {
+body[data-route^="List/Task/Kanban"] .kanban-column {
     flex: 0 0 300px !important;
     min-width: 300px !important;
     max-width: 300px !important;
