@@ -31,13 +31,14 @@ Controlled by `Employee.custom_enable_timesheet_checkin` (Check, default 0). Exe
 
 ## Missing-Day Computation (`get_missing_timesheet_days`)
 
-Scans Monday through yesterday (or today if `include_today=True`) of the current week:
-1. Skip holidays (via `hrms.hr.utils.get_holiday_dates_for_employee`)
-2. Skip days before `date_of_joining`
-3. Compute leave hours for the day (full-day + hourly)
-4. If fully on leave (`leave_hours >= company_working_hours`), skip
-5. Compare `logged_hours` (from Timesheet Detail) vs `required_hours` (company hours - leave)
-6. If shortfall, add to missing list with `existing_timesheet` name (weekly draft lookup)
+Scans weekdays (Mon-Fri) from Monday of the previous week through yesterday (or today if `include_today=True`):
+1. Skip weekends (Saturday, Sunday)
+2. Skip holidays (via `hrms.hr.utils.get_holiday_dates_for_employee`)
+3. Skip days before `date_of_joining`
+4. Compute leave hours for the day (full-day + hourly)
+5. If fully on leave (`leave_hours >= company_working_hours`), skip
+6. Compare `logged_hours` (from Timesheet Detail) vs `required_hours` (company hours - leave)
+7. If shortfall, add to missing list with `existing_timesheet` name (weekly draft lookup)
 
 Returns list of dicts with: `date`, `day_name`, `required_hours`, `logged_hours`, `shortfall`, `leave_hours`, `existing_timesheet`.
 

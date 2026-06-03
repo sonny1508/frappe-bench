@@ -14,12 +14,11 @@ See plan: /home/uriel-server-01/.claude/plans/cryptic-beaming-sketch.md
 import frappe
 from frappe.utils import (
     getdate,
-    add_days,
     nowdate,
     cstr,
     flt,
 )
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 
 # ---------------------------------------------------------------------------
@@ -116,8 +115,8 @@ def is_checkin_enabled(user):
 # ---------------------------------------------------------------------------
 
 def get_missing_timesheet_days(employee, include_today=False):
-    """Compute the list of working days in the current week that are missing
-    or have insufficient timesheet hours.
+    """Compute the list of weekdays (Mon-Fri) in the current and previous week
+    that are missing or have insufficient timesheet hours.
 
     `employee` may be a dict (with name/company/date_of_joining) or an
     employee name (str) — in which case we fetch the record.
@@ -133,13 +132,13 @@ def get_missing_timesheet_days(employee, include_today=False):
             return []
 
     today = getdate(nowdate())
-    # Monday of current week
-    monday = today - timedelta(days=today.weekday())
-    # End date: today if include_today else yesterday
+    monday_this_week = today - timedelta(days=today.weekday())
+    monday_prev_week = monday_this_week - timedelta(days=7)
+    start_date = monday_prev_week
     end_date = today if include_today else today - timedelta(days=1)
 
-    if end_date < monday:
-        return []  # e.g. Monday morning with include_today=False
+    if end_date < start_date:
+        return []
 
     # Company working hours (in seconds -> hours)
     company_working_hours = _get_company_working_hours(employee.company)
@@ -151,7 +150,7 @@ def get_missing_timesheet_days(employee, include_today=False):
         from hrms.hr.utils import get_holiday_dates_for_employee
         holiday_dates = set(
             get_holiday_dates_for_employee(
-                employee.name, cstr(monday), cstr(end_date)
+                employee.name, cstr(start_date), cstr(end_date)
             )
         )
     except Exception:
@@ -160,9 +159,14 @@ def get_missing_timesheet_days(employee, include_today=False):
     date_of_joining = getdate(employee.date_of_joining) if employee.get("date_of_joining") else None
 
     missing = []
-    current = monday
+    current = start_date
     while current <= end_date:
         current_str = cstr(current)
+
+        # Skip weekends (Saturday=5, Sunday=6)
+        if current.weekday() >= 5:
+            current = current + timedelta(days=1)
+            continue
 
         # Skip if before date_of_joining
         if date_of_joining and current < date_of_joining:

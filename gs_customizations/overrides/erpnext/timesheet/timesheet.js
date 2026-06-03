@@ -25,12 +25,14 @@ frappe.ui.form.on("Timesheet", {
 				filters: { company: frm.doc.company },
 			};
 		};
-
-		frm._ts_ctx = null;
 	},
 
 	refresh: function (frm) {
-		if (frm.doc.employee && frm.doc.company && !frm._ts_ctx) {
+		_store_original_dates(frm);
+		// Always re-fetch context on refresh so leave data is never stale
+		// (leave approved after form open, save-triggered refreshes, etc.)
+		frm._ts_ctx = null;
+		if (frm.doc.employee && frm.doc.company) {
 			_fetch_validation_context(frm);
 		} else {
 			_render_daily_summary(frm);
@@ -158,22 +160,24 @@ function _auto_set_from_time(frm, cdt, cdn) {
 	frappe.model.set_value(cdt, cdn, "from_time", new_from_time);
 }
 
-// ---- Rule 3: Date range check (±4 calendar days) ----
+// ---- Date range check (±6 days, checkin-enabled only) ----
 
 function _validate_row_date_range(frm, cdt, cdn) {
+	if (!frm._ts_ctx || !frm._ts_ctx.checkin_enabled) return;
+
 	var row = locals[cdt][cdn];
 	if (!row.from_time) return;
 
 	var row_date = row.from_time.split(" ")[0];
 	var today = frappe.datetime.get_today();
-	var diff = frappe.datetime.get_diff(row_date, today);
+	var diff = frappe.datetime.get_diff(today, row_date);
 
-	if (Math.abs(diff) > 4) {
+	if (Math.abs(diff) > 6) {
 		frappe.msgprint({
 			title: __("Invalid Date"),
 			indicator: "red",
 			message: __(
-				"Row {0}: Date {1} is more than 4 days from today. Please choose a date within ±4 days.",
+				"Row {0}: Date {1} is outside the allowed ±6 day window. Please choose a date within 6 days of today.",
 				[row.idx, row_date]
 			),
 		});
@@ -284,20 +288,27 @@ function _validate_all_rules(frm) {
 		if (!row.from_time) return;
 
 		var row_date = row.from_time.split(" ")[0];
-		var diff = frappe.datetime.get_diff(row_date, today);
 
-		// Rule 3: ±4 calendar days
-		if (Math.abs(diff) > 4) {
-			frappe.msgprint({
-				title: __("Invalid Date"),
-				indicator: "red",
-				message: __(
-					"Row {0}: Date {1} is more than 4 days from today. You can only log time within ±4 calendar days.",
-					[row.idx, row_date]
-				),
-			});
-			valid = false;
-			return;
+		// Date restriction: only for checkin-enabled employees, only for new/changed dates
+		if (frm._ts_ctx && frm._ts_ctx.checkin_enabled) {
+			var orig_date = (frm._original_row_dates || {})[row.name];
+			var is_new_or_changed = !orig_date || orig_date !== row_date;
+
+			if (is_new_or_changed) {
+				var diff = frappe.datetime.get_diff(today, row_date);
+				if (Math.abs(diff) > 6) {
+					frappe.msgprint({
+						title: __("Invalid Date"),
+						indicator: "red",
+						message: __(
+							"Row {0}: Date {1} is outside the allowed ±6 day window. You can only log time within 6 days of today.",
+							[row.idx, row_date]
+						),
+					});
+					valid = false;
+					return;
+				}
+			}
 		}
 
 		// Next-day overflow
@@ -376,10 +387,32 @@ function _validate_all_rules(frm) {
 
 // ---- Daily Hours Summary rendering ----
 
+function _get_timesheet_monday(frm) {
+	// Determine Monday of the timesheet's week.
+	if (frm.doc.start_date) {
+		return moment(frm.doc.start_date).startOf("isoWeek").format("YYYY-MM-DD");
+	}
+	var earliest = null;
+	(frm.doc.time_logs || []).forEach(function (row) {
+		if (row.from_time) {
+			var d = row.from_time.split(" ")[0];
+			if (!earliest || d < earliest) earliest = d;
+		}
+	});
+	if (earliest) {
+		return moment(earliest).startOf("isoWeek").format("YYYY-MM-DD");
+	}
+	return moment().startOf("isoWeek").format("YYYY-MM-DD");
+}
+
 function _render_daily_summary(frm) {
 	var wrapper = frm.fields_dict.custom_daily_hours_summary;
 	if (!wrapper || !wrapper.$wrapper) return;
 
+	var has_ctx = !!frm._ts_ctx;
+	var week_monday = _get_timesheet_monday(frm);
+
+	// Collect logged hours per date from time_logs
 	var date_hours = {};
 	(frm.doc.time_logs || []).forEach(function (row) {
 		if (!row.from_time) return;
@@ -387,32 +420,46 @@ function _render_daily_summary(frm) {
 		date_hours[date] = (date_hours[date] || 0) + flt(row.hours);
 	});
 
-	var dates = Object.keys(date_hours).sort();
-	if (!dates.length) {
-		wrapper.$wrapper.html("");
-		return;
+	// Always show Mon–Fri of the week, plus any extra logged dates outside that range
+	var date_set = {};
+	for (var i = 0; i < 5; i++) {
+		date_set[moment(week_monday).add(i, "days").format("YYYY-MM-DD")] = true;
 	}
+	for (var d in date_hours) {
+		date_set[d] = true;
+	}
+	var dates = Object.keys(date_set).sort();
 
-	var has_ctx = !!frm._ts_ctx;
 	var grand_total = 0;
-
 	var rows_html = "";
-	dates.forEach(function (date) {
-		var day_name = moment(date).format("dddd");
-		var logged = date_hours[date];
-		grand_total += logged;
 
+	dates.forEach(function (date) {
 		var leave = has_ctx ? (frm._ts_ctx.leave_data[date] || 0) : 0;
 		var max_raw = has_ctx ? frm._ts_ctx.company_working_hours : 0;
-		var available = has_ctx ? max_raw - leave : 0;
+		var submitted = has_ctx ? ((frm._ts_ctx.submitted_hours || {})[date] || 0) : 0;
+		var effective_available = has_ctx ? max_raw - leave - submitted : 0;
 
-		var available_display = has_ctx ? available.toFixed(0) + "h" : "—";
-		if (has_ctx && leave > 0) {
-			available_display += " <span class='text-muted'>(" + leave.toFixed(0) + "h leave)</span>";
+		// Hide dates fully consumed by leave + submitted hours from other timesheets
+		if (has_ctx && effective_available <= 0.01) {
+			return;
+		}
+
+		var day_name = moment(date).format("dddd");
+		var logged = date_hours[date] || 0;
+		grand_total += logged;
+
+		var available_display = has_ctx ? effective_available.toFixed(0) + "h" : "—";
+		if (has_ctx) {
+			var notes = [];
+			if (leave > 0) notes.push(leave.toFixed(0) + "h leave");
+			if (submitted > 0) notes.push(submitted.toFixed(0) + "h submitted");
+			if (notes.length) {
+				available_display += " <span class='text-muted'>(" + notes.join(", ") + ")</span>";
+			}
 		}
 
 		var row_style = "";
-		if (has_ctx && logged > available + 0.01) {
+		if (has_ctx && logged > effective_available + 0.01) {
 			row_style = ' style="color: var(--red-500);"';
 		}
 
@@ -449,6 +496,17 @@ function _render_daily_summary(frm) {
 		"</div>";
 
 	wrapper.$wrapper.html(html);
+}
+
+// ---- Store original row dates for detecting new/changed dates ----
+
+function _store_original_dates(frm) {
+	frm._original_row_dates = {};
+	(frm.doc.time_logs || []).forEach(function (row) {
+		if (row.from_time) {
+			frm._original_row_dates[row.name] = row.from_time.split(" ")[0];
+		}
+	});
 }
 
 // ---- Toggle read-only on project/task fields for Free/Documents activity ----

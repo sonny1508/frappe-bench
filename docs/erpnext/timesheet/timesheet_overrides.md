@@ -34,7 +34,7 @@ doc_events = {
 
 2. **Leave deduction**: Approved leave on a date reduces the max allowed hours. Full-day leave blocks entry entirely. Hourly leave (`custom_use_single_date=1`) subtracts `custom_total_leave_time` (also seconds). Leave data is fetched via `timesheet_checkin.get_leave_hours_for_date()`.
 
-3. **Date range**: `from_time` date must be within +/-4 calendar days of today. JS clears the field; Python throws.
+3. **Date range** (checkin-enabled employees only): `from_time` date must be within the last 6 calendar days. Only applies to new rows or rows where the date changed — existing rows with older dates can be edited (hours, activity, etc.) without restriction. No future-date limit. Users without `custom_enable_timesheet_checkin` have no date restriction. JS clears the field; Python throws.
 
 4. **Next-day overflow**: `from_time + hours` must not cross midnight (i.e., `getdate(from_time) == getdate(to_time)`). Prevents e.g. 18:00 + 8h = 02:00 next day.
 
@@ -46,10 +46,12 @@ Fetched once on refresh via `get_timesheet_validation_context(employee, company)
 {
   "company_working_hours": 8.0,
   "start_working_hour": "09:00:00",
-  "leave_data": { "2026-05-25": 0, "2026-05-26": 2.5, ... }
+  "leave_data": { "2026-05-25": 0, "2026-05-26": 2.5, ... },
+  "submitted_hours": { "2026-05-25": 8.0, ... },
+  "checkin_enabled": true
 }
 ```
-`leave_data` covers +/-4 days from today. Validations degrade gracefully if `_ts_ctx` is null.
+`leave_data` covers -14 to +7 days from today (ensures both current and previous week are fully covered). `submitted_hours` maps dates to hours already logged in submitted (docstatus=1) timesheets for the same employee — used by the daily summary to reduce available hours and hide fully-consumed dates. `checkin_enabled` reflects the employee's `custom_enable_timesheet_checkin` flag and controls whether date restrictions apply. Validations degrade gracefully if `_ts_ctx` is null.
 
 ### Auto-set from_time (Rule 4)
 On `time_logs_add`:
@@ -58,7 +60,7 @@ On `time_logs_add`:
 - Skips if target date has full-day leave
 
 ### Daily Hours Summary (`custom_daily_hours_summary`)
-HTML field rendered client-side. Shows a table: Date | Day | Logged hours | Available hours (with leave note). Rows turn red when logged > available. Updates on every field change.
+HTML field rendered client-side. Always shows all weekdays (Mon–Fri) of the timesheet's week, plus any extra dates with time_logs outside that range. Columns: Date | Day | Logged hours | Available hours. Available hours = company working hours − approved leave − hours already logged in submitted timesheets for that date. Annotations in the Available column note leave and submitted hours separately. Dates where available ≤ 0 (fully consumed by leave + submitted timesheets) are hidden entirely. Rows turn red when logged > available. Updates on every field change (not just save).
 
 ## Server-Side Utilities
 
