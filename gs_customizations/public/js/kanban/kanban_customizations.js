@@ -900,6 +900,21 @@
         });
     });
 
+    document.addEventListener("click", function(e) {
+        const target = e.target.closest(".filter-button, .filter-x-button");
+        if (!target) return;
+        if (!isKanbanView()) return;
+
+        const isProjectsUser = frappe.user_roles.includes("GS - Projects User");
+        const isSystemManager = frappe.user_roles.includes("System Manager");
+
+        if (isProjectsUser && !isSystemManager) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+        }
+    }, true);
+
     // Start initialization when DOM is ready
     $(document).ready(init);
 

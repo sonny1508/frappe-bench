@@ -128,6 +128,10 @@
  {
     display: block !important;
 }
+/* .kanban-card .kanban-card-doc > div[data-fieldname="type"],
+.kanban-card .kanban-card-doc > div[data-fieldname="custom_utilization"] {
+    display: block !important;
+} */
 
 /* Expanded state - show all children */
 .kanban-card.expanded .kanban-card-doc > div {
