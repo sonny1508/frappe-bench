@@ -10,6 +10,18 @@ frappe.listview_settings["Task"] = {
 		"depends_on_tasks",
 	],
 	onload: function (listview) {
+		const filters = listview.filter_area.get();
+
+		const has_closed_filter = filters.some((f) =>
+			f[1] === "status" && f[2] === "!=" && f[3] === "Closed"
+		);
+
+		if (!has_closed_filter) {
+			listview.filter_area.add([
+				["Task", "status", "!=", "Closed"]
+			]);
+		}
+		
 		var method = "erpnext.projects.doctype.task.task.set_multiple_status";
 
 		listview.page.add_menu_item(__("Set as Open"), function () {
