@@ -36,7 +36,8 @@ def validate_timesheet_rules(doc, method):
     """Enforce custom timesheet rules on validate:
     1) Daily hours per date <= company working hours
     2) Daily hours must subtract approved leave; full-day leave blocks entry
-    3) from_time date must be within ±4 calendar days of today
+    3) from_time date must be within ±6 days of today (checkin-enabled employees only,
+       only for new rows or rows where the date changed)
     4) Working hours must not exceed into the next day
     """
     if not doc.employee or not doc.company:
@@ -49,6 +50,31 @@ def validate_timesheet_rules(doc, method):
         return
 
     today = getdate(nowdate())
+
+    checkin_enabled = frappe.db.get_value(
+        "Employee", doc.employee, "custom_enable_timesheet_checkin"
+    )
+
+    # Fetch the dates already persisted in DB for each row of this timesheet.
+    # Keyed by child-row name so we can detect new rows (not in DB yet) vs
+    # rows whose date was merely edited.  Bypasses get_doc_before_save() which
+    # is unreliable when the pre-save cache wasn't populated (API calls, new
+    # tabs, certain submit paths).
+    saved_row_dates = {}
+    if checkin_enabled and not doc.is_new():
+        rows_in_db = frappe.db.sql(
+            """
+            SELECT name, DATE(from_time) AS dt
+            FROM `tabTimesheet Detail`
+            WHERE parent = %(parent)s
+            """,
+            {"parent": doc.name},
+            as_dict=True,
+        )
+        for r in rows_in_db:
+            if r.dt:
+                saved_row_dates[r.name] = getdate(r.dt)
+
     date_hours = defaultdict(float)
 
     for row in doc.time_logs:
@@ -57,13 +83,16 @@ def validate_timesheet_rules(doc, method):
 
         row_date = getdate(row.from_time)
 
-        if abs((row_date - today).days) > 4:
-            frappe.throw(
-                _("Row {0}: Date {1} is more than 4 days from today. "
-                  "You can only log time within ±4 calendar days of today.").format(
-                    row.idx, row_date.strftime("%Y-%m-%d")
+        if checkin_enabled:
+            saved_date = saved_row_dates.get(row.name)
+            is_new_or_date_changed = saved_date is None or saved_date != row_date
+            if is_new_or_date_changed and abs((today - row_date).days) > 6:
+                frappe.throw(
+                    _("Row {0}: Date {1} is outside the allowed ±6 day window. "
+                      "You can only log time within 6 days of today.").format(
+                        row.idx, row_date.strftime("%Y-%m-%d")
+                    )
                 )
-            )
 
         if row.to_time and getdate(row.to_time) != row_date:
             frappe.throw(
@@ -138,16 +167,53 @@ def get_timesheet_validation_context(employee, company):
     else:
         start_working_hour = "09:00:00"
 
+    checkin_enabled = bool(frappe.db.get_value(
+        "Employee", employee, "custom_enable_timesheet_checkin"
+    ))
+
+    # Window covers current + previous week fully (prev Monday can be up to
+    # 13 days ago) plus a one-week look-ahead for the ±6 day date check.
     today = getdate(nowdate())
+    window_start = today - timedelta(days=14)
+    window_end = today + timedelta(days=7)
+
     leave_data = {}
-    for delta in range(-4, 5):
-        date = today + timedelta(days=delta)
-        date_str = str(date)
-        leave_hours = get_leave_hours_for_date(employee, date_str, company_hours)
-        leave_data[date_str] = round(leave_hours, 2)
+    current = window_start
+    while current <= window_end:
+        date_str = str(current)
+        leave_data[date_str] = round(
+            get_leave_hours_for_date(employee, date_str, company_hours), 2
+        )
+        current += timedelta(days=1)
+
+    # Hours already logged in submitted timesheets for this employee.
+    # Wrapped in try/except so a SQL failure here never blocks leave_data
+    # from reaching the client.
+    submitted_hours = {}
+    try:
+        submitted_rows = frappe.db.sql(
+            """
+            SELECT DATE(td.from_time) AS log_date, SUM(td.hours) AS total
+            FROM `tabTimesheet Detail` td
+            INNER JOIN `tabTimesheet` ts ON td.parent = ts.name
+            WHERE ts.employee = %(employee)s
+              AND ts.docstatus = 1
+              AND DATE(td.from_time) >= %(start)s
+              AND DATE(td.from_time) <= %(end)s
+            GROUP BY DATE(td.from_time)
+            """,
+            {"employee": employee, "start": str(window_start), "end": str(window_end)},
+            as_dict=True,
+        )
+        for row in submitted_rows:
+            submitted_hours[str(row.log_date)] = round(flt(row.total), 2)
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), "gs_customizations: submitted_hours fetch failed")
 
     return {
         "company_working_hours": round(company_hours, 2),
         "start_working_hour": start_working_hour,
         "leave_data": leave_data,
+        "submitted_hours": submitted_hours,
+        "checkin_enabled": checkin_enabled,
     }

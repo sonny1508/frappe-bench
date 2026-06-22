@@ -296,6 +296,7 @@ def custom_leave_application():
 			{
 				"fieldname": "custom_total_leave_time",
 				"fieldtype": "Duration",
+				"hide_days": 1,
 				"hide_seconds": 1,
 				"in_list_view": 1,
 				"insert_after": "total_leave_days",
@@ -307,6 +308,7 @@ def custom_leave_application():
 			{
 				"fieldname": "custom_leave_balance_before_application",
 				"fieldtype": "Duration",
+				"hide_days": 1,
 				"hide_seconds": 1,
 				"insert_after": "leave_balance",
 				"is_system_generated": 0,
