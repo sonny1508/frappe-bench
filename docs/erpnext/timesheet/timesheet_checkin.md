@@ -33,7 +33,7 @@ Controlled by `Employee.custom_enable_timesheet_checkin` (Check, default 0). Exe
 
 Scans weekdays (Mon-Fri) from Monday of the previous week through yesterday (or today if `include_today=True`):
 1. Skip weekends (Saturday, Sunday)
-2. Skip holidays (via `hrms.hr.utils.get_holiday_dates_for_employee`)
+2. Skip holidays (via `get_holiday_dates()` → `hrms.hr.utils.get_holiday_dates_for_employee`) and Absent days (via `get_absent_dates()`) — both are non-working days
 3. Skip days before `date_of_joining`
 4. Compute leave hours for the day (full-day + hourly)
 5. If fully on leave (`leave_hours >= company_working_hours`), skip
@@ -44,10 +44,13 @@ Returns list of dicts with: `date`, `day_name`, `required_hours`, `logged_hours`
 
 ## Key Helper Functions (used by both checkin and timesheet overrides)
 
-- `get_leave_hours_for_date(employee, date, company_working_hours)`: Sums approved leave for a date. Handles two leave types:
-  - Hourly: `custom_use_single_date=1`, reads `custom_total_leave_time` (seconds / 3600)
-  - Full-day: standard `from_date/to_date` range, half-day aware
-  - Capped at `company_working_hours`
+- `get_leave_hours_for_date(employee, date, company_working_hours)`: Returns leave hours for a date, sourced from the **Attendance** record (not Leave Application — every approved Leave Application creates/updates Attendance, so it's the single source of truth). Status mapping:
+  - `On Leave` → full `company_working_hours`
+  - `Hours Leave` → `custom_total_leave_time` (seconds / 3600), capped at `company_working_hours`
+  - `Half Day` → half of `company_working_hours` (legacy; being phased out in favour of Hours Leave)
+  - anything else / no Attendance row → 0
+
+- `get_holiday_dates(employee, start_date, end_date)`: Returns a set of holiday date strings from the employee's Holiday List via `get_holiday_dates_for_employee`. Returns empty set on failure (graceful degrade).
 
 - `get_logged_hours_for_date(employee, date)`: SQL sum of `Timesheet Detail.hours` where `DATE(from_time) = date` and docstatus in (0, 1).
 

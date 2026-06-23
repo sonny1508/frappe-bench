@@ -145,16 +145,9 @@ def get_missing_timesheet_days(employee, include_today=False):
     if not company_working_hours:
         return []
 
-    # Holidays in the window
-    try:
-        from hrms.hr.utils import get_holiday_dates_for_employee
-        holiday_dates = set(
-            get_holiday_dates_for_employee(
-                employee.name, cstr(start_date), cstr(end_date)
-            )
-        )
-    except Exception:
-        holiday_dates = set()
+    # Non-working days in the window: holidays + Absent attendance.
+    holiday_dates = get_holiday_dates(employee.name, start_date, end_date)
+    absent_dates = get_absent_dates(employee.name, start_date, end_date)
 
     date_of_joining = getdate(employee.date_of_joining) if employee.get("date_of_joining") else None
 
@@ -173,8 +166,8 @@ def get_missing_timesheet_days(employee, include_today=False):
             current = current + timedelta(days=1)
             continue
 
-        # Skip if holiday
-        if current_str in holiday_dates:
+        # Skip if holiday or marked Absent (non-working days)
+        if current_str in holiday_dates or current_str in absent_dates:
             current = current + timedelta(days=1)
             continue
 
@@ -216,55 +209,97 @@ def _get_company_working_hours(company):
     return flt(seconds) / 3600.0
 
 
+def leave_hours_from_attendance(status, custom_total_leave_time, company_working_hours):
+    """Map an Attendance status to leave hours for the day (see CustomAttendance):
+      - "On Leave"    -> full company working hours
+      - "Hours Leave" -> custom_total_leave_time (seconds) / 3600
+      - "Half Day"    -> half of company working hours (legacy; half-day is
+                         being phased out in favour of Hours Leave)
+      - anything else / no record -> 0
+    """
+    if status == "On Leave":
+        return company_working_hours
+    if status == "Hours Leave":
+        return min(flt(custom_total_leave_time) / 3600.0, company_working_hours)
+    if status == "Half Day":
+        return company_working_hours / 2.0
+    return 0.0
+
+
+def get_attendance_map(employee, start_date, end_date):
+    """Return {date_str: frappe._dict(status, custom_total_leave_time)} for the
+    employee's submitted Attendance within [start_date, end_date].
+
+    Lets callers that scan a whole window read Attendance once instead of
+    per-day."""
+    rows = frappe.get_all(
+        "Attendance",
+        filters={
+            "employee": employee,
+            "docstatus": 1,
+            "attendance_date": ["between", [cstr(start_date), cstr(end_date)]],
+        },
+        fields=["attendance_date", "status", "custom_total_leave_time"],
+    )
+    return {cstr(r.attendance_date): r for r in rows}
+
+
 def get_leave_hours_for_date(employee, date, company_working_hours=None):
-    """Return total approved leave hours for this employee on this date."""
+    """Return approved leave hours for this employee on this date.
+
+    Sourced from the **Attendance** record, not Leave Application: every
+    approved Leave Application creates/updates the matching Attendance (see
+    CustomLeaveApplication.update_attendance), so Attendance is the single
+    source of truth and avoids re-deriving leave from the application range.
+    """
     if company_working_hours is None:
         company = frappe.db.get_value("Employee", employee, "company")
         company_working_hours = _get_company_working_hours(company)
 
-    total = 0.0
+    attendance = frappe.db.get_value(
+        "Attendance",
+        {"employee": employee, "attendance_date": date, "docstatus": 1},
+        ["status", "custom_total_leave_time"],
+        as_dict=True,
+    )
+    if not attendance:
+        return 0.0
 
-    # Hour-based single-date leave applications
-    hour_leaves = frappe.get_all(
-        "Leave Application",
+    return leave_hours_from_attendance(
+        attendance.status, attendance.custom_total_leave_time, company_working_hours
+    )
+
+
+def get_holiday_dates(employee, start_date, end_date):
+    """Return a set of holiday date strings for the employee's Holiday List
+    within [start_date, end_date]. Returns empty set on any failure so callers
+    degrade gracefully."""
+    try:
+        from hrms.hr.utils import get_holiday_dates_for_employee
+        return set(
+            get_holiday_dates_for_employee(employee, cstr(start_date), cstr(end_date))
+        )
+    except Exception:
+        return set()
+
+
+def get_absent_dates(employee, start_date, end_date):
+    """Return a set of date strings where the employee has a submitted
+    Attendance with status 'Absent' within [start_date, end_date].
+
+    An Absent day is a non-working day for timesheet purposes — treated like a
+    holiday: hidden in the daily summary and blocked from time entry."""
+    rows = frappe.get_all(
+        "Attendance",
         filters={
             "employee": employee,
             "docstatus": 1,
-            "status": "Approved",
-            "custom_use_single_date": 1,
-            "custom_single_date": date,
+            "status": "Absent",
+            "attendance_date": ["between", [cstr(start_date), cstr(end_date)]],
         },
-        fields=["custom_total_leave_time"],
+        pluck="attendance_date",
     )
-    for lv in hour_leaves:
-        total += flt(lv.custom_total_leave_time) / 3600.0
-
-    # Full-day leave applications spanning this date
-    full_day_leaves = frappe.db.sql(
-        """
-        SELECT name, half_day, half_day_date
-        FROM `tabLeave Application`
-        WHERE employee = %(employee)s
-          AND docstatus = 1
-          AND status = 'Approved'
-          AND (custom_use_single_date = 0 OR custom_use_single_date IS NULL)
-          AND from_date <= %(date)s
-          AND to_date >= %(date)s
-        """,
-        {"employee": employee, "date": date},
-        as_dict=True,
-    )
-    for lv in full_day_leaves:
-        if lv.half_day and cstr(lv.half_day_date) == cstr(date):
-            total += company_working_hours / 2.0
-        else:
-            total += company_working_hours
-
-    # Cap at working hours to avoid negatives from overlapping entries
-    if total > company_working_hours:
-        total = company_working_hours
-
-    return total
+    return {cstr(d) for d in rows}
 
 
 def get_logged_hours_for_date(employee, date):

@@ -152,12 +152,41 @@ function _auto_set_from_time(frm, cdt, cdn) {
 	}
 
 	var target_date = new_from_time.split(" ")[0];
+	if (_get_off_day_block(frm, target_date)) {
+		return;
+	}
 	var leave_hours = frm._ts_ctx.leave_data[target_date] || 0;
 	if (leave_hours >= frm._ts_ctx.company_working_hours) {
 		return;
 	}
 
 	frappe.model.set_value(cdt, cdn, "from_time", new_from_time);
+}
+
+// ---- Non-working day (holiday / Absent attendance) detection ----
+// Returns {title, message} when the date is a non-working day, else null.
+
+function _get_off_day_block(frm, date) {
+	if (!frm._ts_ctx) return null;
+	if ((frm._ts_ctx.holiday_dates || []).indexOf(date) !== -1) {
+		return {
+			title: __("Holiday"),
+			message: __(
+				"{0} is a holiday. You cannot log timesheet hours on this date.",
+				[date]
+			),
+		};
+	}
+	if ((frm._ts_ctx.absent_dates || []).indexOf(date) !== -1) {
+		return {
+			title: __("Marked Absent"),
+			message: __(
+				"{0} is marked as Absent in Attendance. You cannot log timesheet hours on this date.",
+				[date]
+			),
+		};
+	}
+	return null;
 }
 
 // ---- Date range check (±6 days, checkin-enabled only) ----
@@ -194,6 +223,15 @@ function _validate_row_leave_block(frm, cdt, cdn) {
 	if (!row.from_time) return;
 
 	var row_date = row.from_time.split(" ")[0];
+
+	// Non-working day (holiday / Absent): no work expected, block entry.
+	var off = _get_off_day_block(frm, row_date);
+	if (off) {
+		frappe.msgprint({ title: off.title, indicator: "red", message: off.message });
+		frappe.model.set_value(cdt, cdn, "from_time", "");
+		return;
+	}
+
 	var leave_hours = frm._ts_ctx.leave_data[row_date];
 	if (leave_hours === undefined) return;
 
@@ -343,6 +381,14 @@ function _validate_all_rules(frm) {
 
 	for (var date_str in date_hours) {
 		var total = date_hours[date_str];
+
+		var off = _get_off_day_block(frm, date_str);
+		if (off) {
+			frappe.msgprint({ title: off.title, indicator: "red", message: off.message });
+			frappe.validated = false;
+			return;
+		}
+
 		var leave_hours = frm._ts_ctx.leave_data[date_str] || 0;
 
 		if (leave_hours >= frm._ts_ctx.company_working_hours) {
@@ -434,6 +480,11 @@ function _render_daily_summary(frm) {
 	var rows_html = "";
 
 	dates.forEach(function (date) {
+		// Non-working days (holiday / Absent) — never show them in the summary.
+		if (_get_off_day_block(frm, date)) {
+			return;
+		}
+
 		var leave = has_ctx ? (frm._ts_ctx.leave_data[date] || 0) : 0;
 		var max_raw = has_ctx ? frm._ts_ctx.company_working_hours : 0;
 		var submitted = has_ctx ? ((frm._ts_ctx.submitted_hours || {})[date] || 0) : 0;

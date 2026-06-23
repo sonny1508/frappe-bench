@@ -35,15 +35,24 @@ def update_completed_from_task(doc, method):
 def validate_timesheet_rules(doc, method):
     """Enforce custom timesheet rules on validate:
     1) Daily hours per date <= company working hours
-    2) Daily hours must subtract approved leave; full-day leave blocks entry
-    3) from_time date must be within ±6 days of today (checkin-enabled employees only,
-       only for new rows or rows where the date changed)
-    4) Working hours must not exceed into the next day
+    2) Daily hours must subtract approved leave (from Attendance); full-day
+       leave blocks entry
+    3) No hours on a non-working day: Holiday List dates and Absent-attendance
+       dates are blocked entirely
+    4) from_time date must be within ±6 days of today — gated on the logged-in
+       user's check-in flag (is_checkin_enabled), only for new rows or rows
+       where the date changed
+    5) Working hours must not exceed into the next day
     """
     if not doc.employee or not doc.company:
         return
 
-    from gs_customizations.utils.timesheet_checkin import get_leave_hours_for_date
+    from gs_customizations.utils.timesheet_checkin import (
+        get_leave_hours_for_date,
+        get_holiday_dates,
+        get_absent_dates,
+        is_checkin_enabled,
+    )
 
     company_hours = _get_company_working_hours_float(doc.company)
     if not company_hours:
@@ -51,9 +60,10 @@ def validate_timesheet_rules(doc, method):
 
     today = getdate(nowdate())
 
-    checkin_enabled = frappe.db.get_value(
-        "Employee", doc.employee, "custom_enable_timesheet_checkin"
-    )
+    # The ±6 day window is gated on the *logged-in user*, not the timesheet's
+    # employee: only a user who has check-in enabled is date-restricted. A
+    # manager (or any user without the flag) editing a sheet is unrestricted.
+    checkin_enabled = is_checkin_enabled(frappe.session.user)
 
     # Fetch the dates already persisted in DB for each row of this timesheet.
     # Keyed by child-row name so we can detect new rows (not in DB yet) vs
@@ -107,7 +117,27 @@ def validate_timesheet_rules(doc, method):
 
         date_hours[str(row_date)] += flt(row.hours)
 
+    # Non-working days (holidays + Absent attendance) over the span of logged
+    # dates. Both are blocked from time entry.
+    holiday_dates = set()
+    absent_dates = set()
+    if date_hours:
+        all_dates = sorted(date_hours.keys())
+        holiday_dates = get_holiday_dates(doc.employee, all_dates[0], all_dates[-1])
+        absent_dates = get_absent_dates(doc.employee, all_dates[0], all_dates[-1])
+
     for date_str, total_hours in date_hours.items():
+        if date_str in holiday_dates:
+            frappe.throw(
+                _("{0} is a holiday. You cannot log timesheet hours on this date.").format(date_str)
+            )
+
+        if date_str in absent_dates:
+            frappe.throw(
+                _("{0} is marked as Absent in Attendance. "
+                  "You cannot log timesheet hours on this date.").format(date_str)
+            )
+
         leave_hours = get_leave_hours_for_date(doc.employee, date_str, company_hours)
 
         if leave_hours >= company_hours:
@@ -152,7 +182,12 @@ def _get_company_working_hours_float(company):
 @frappe.whitelist()
 def get_timesheet_validation_context(employee, company):
     """Return validation context for client-side timesheet rules."""
-    from gs_customizations.utils.timesheet_checkin import get_leave_hours_for_date
+    from gs_customizations.utils.timesheet_checkin import (
+        get_attendance_map,
+        leave_hours_from_attendance,
+        get_holiday_dates,
+        is_checkin_enabled,
+    )
 
     company_hours = _get_company_working_hours_float(company)
 
@@ -167,9 +202,9 @@ def get_timesheet_validation_context(employee, company):
     else:
         start_working_hour = "09:00:00"
 
-    checkin_enabled = bool(frappe.db.get_value(
-        "Employee", employee, "custom_enable_timesheet_checkin"
-    ))
+    # Date restriction follows the *logged-in user*, not the timesheet's
+    # employee — only a check-in-enabled user is date-limited.
+    checkin_enabled = is_checkin_enabled(frappe.session.user)
 
     # Window covers current + previous week fully (prev Monday can be up to
     # 13 days ago) plus a one-week look-ahead for the ±6 day date check.
@@ -177,12 +212,25 @@ def get_timesheet_validation_context(employee, company):
     window_start = today - timedelta(days=14)
     window_end = today + timedelta(days=7)
 
+    holiday_dates = sorted(get_holiday_dates(employee, window_start, window_end))
+
+    # One Attendance read for the whole window; derive leave hours per day and
+    # the Absent-day set from it (instead of a query per day).
+    attendance_map = get_attendance_map(employee, window_start, window_end)
+    absent_dates = sorted(
+        d for d, att in attendance_map.items() if att.status == "Absent"
+    )
+
     leave_data = {}
     current = window_start
     while current <= window_end:
         date_str = str(current)
+        att = attendance_map.get(date_str)
         leave_data[date_str] = round(
-            get_leave_hours_for_date(employee, date_str, company_hours), 2
+            leave_hours_from_attendance(
+                att.status, att.custom_total_leave_time, company_hours
+            ) if att else 0.0,
+            2,
         )
         current += timedelta(days=1)
 
@@ -215,5 +263,7 @@ def get_timesheet_validation_context(employee, company):
         "start_working_hour": start_working_hour,
         "leave_data": leave_data,
         "submitted_hours": submitted_hours,
+        "holiday_dates": holiday_dates,
+        "absent_dates": absent_dates,
         "checkin_enabled": checkin_enabled,
     }
