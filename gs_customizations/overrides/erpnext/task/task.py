@@ -297,24 +297,29 @@ def validate_status_transition(doc):
 
 # Auto update fields, tags, etc
 def auto_set_reviewer(doc):
-	"""Auto-set custom_reviewer when status changes to QA Reviewing/Feedback/Approved"""
-	if doc.is_new():
-		return
-	
-	old_status = frappe.db.get_value("Task", doc.name, "status")
-	new_status = doc.status
-	target_statuses = ["QA Reviewing", "QA Feedback", "QA Approved", "Delivered"]
-	
-	# Only when transitioning TO "QA Reviewing" from something else
-	if new_status in target_statuses and old_status != new_status:
-		employee_name = frappe.db.get_value(
-			"Employee", 
-			{"user_id": frappe.session.user}, 
-			"employee_name",
-		)
-		if employee_name:
-			doc.custom_reviewer = employee_name
-			return
+    """Auto-set custom_reviewer: inherit from parent, or set on status transition for top-level tasks."""
+    # Child tasks: always sync reviewer from parent, skip status-based logic
+    if doc.parent_task:
+        doc.custom_reviewer = frappe.db.get_value(
+            "Task", doc.parent_task, "custom_reviewer"
+        )
+        return
+
+    if doc.is_new():
+        return
+
+    old_status = frappe.db.get_value("Task", doc.name, "status")
+    new_status = doc.status
+    target_statuses = ["QA Reviewing", "QA Feedback", "QA Approved", "Delivered"]
+
+    if new_status in target_statuses and old_status != new_status:
+        employee_name = frappe.db.get_value(
+            "Employee",
+            {"user_id": frappe.session.user},
+            "employee_name",
+        )
+        if employee_name:
+            doc.custom_reviewer = employee_name
 		
     # Fallback: if custom_reviewer is still empty, pull from Project
 	# if not doc.custom_reviewer and doc.project:

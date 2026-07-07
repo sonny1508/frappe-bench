@@ -905,10 +905,10 @@
         if (!target) return;
         if (!isKanbanView()) return;
 
-        const isProjectsUser = frappe.user_roles.includes("GS - Projects User");
+        // Might need to change this to the manager roles in site config later on
         const isSystemManager = frappe.user_roles.includes("System Manager");
 
-        if (isProjectsUser && !isSystemManager) {
+        if (!isSystemManager) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
