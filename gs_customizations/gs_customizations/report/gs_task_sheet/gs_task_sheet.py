@@ -1,6 +1,7 @@
 import frappe
 from frappe import _
 from frappe.utils import cint, getdate, get_first_day, get_last_day
+from gs_customizations.validate.permissions import is_manager
 
 def execute(filters=None):
     """
@@ -251,7 +252,22 @@ def get_conditions(filters):
             conditions += " AND status = 'Closed'"
         elif filters.status == "Both":
             conditions += "And status IN ('Completed', 'Closed')"
-    
+
+    # Non-managers can only see their own records. Raw SQL bypasses
+    # permission_query_conditions, so the lock must be re-applied here.
+    # completed_by holds the Employee ID (set in task.py auto_set_fields_on_todo),
+    # so match on the session user's Employee; keep the user email as a
+    # fallback for rows where core ERPNext stored the User instead.
+    if not is_manager():
+        own_ids = [frappe.session.user]
+        employee = frappe.db.get_value(
+            "Employee", {"user_id": frappe.session.user}, "name"
+        )
+        if employee:
+            own_ids.append(employee)
+        filters.own_ids = own_ids
+        conditions += " AND completed_by IN %(own_ids)s"
+
     return conditions
 
 

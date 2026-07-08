@@ -2,6 +2,7 @@ import frappe
 from frappe import _
 from frappe.desk.reportview import build_match_conditions
 from collections import defaultdict
+from gs_customizations.validate.permissions import is_manager
 
 
 def execute(filters=None):
@@ -91,6 +92,24 @@ def get_conditions(filters):
 	match_conditions = build_match_conditions("Timesheet")
 	if match_conditions:
 		conditions += " and %s" % match_conditions
+
+	# Non-managers can only see their own timesheets. Raw SQL bypasses
+	# permission_query_conditions, so the lock must be re-applied here.
+	# Timesheet.employee holds the Employee ID; owner is kept as a
+	# fallback for timesheets not linked to an Employee record.
+	if not is_manager():
+		filters["session_user"] = frappe.session.user
+		own_condition = "`tabTimesheet`.owner = %(session_user)s"
+		employee = frappe.db.get_value(
+			"Employee", {"user_id": frappe.session.user}, "name"
+		)
+		if employee:
+			filters["session_employee"] = employee
+			own_condition = (
+				"(`tabTimesheet`.employee = %(session_employee)s"
+				" or `tabTimesheet`.owner = %(session_user)s)"
+			)
+		conditions += " and %s" % own_condition
 
 	return conditions
 

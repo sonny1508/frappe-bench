@@ -13,7 +13,10 @@
  "roles": [
   {
    "role": "GS - Projects Manager"
-  }, 
+  },
+  {
+   "role": "GS - Projects User"
+  },
   {
    "role": "Projects Manager"
   }

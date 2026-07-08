@@ -181,8 +181,10 @@ after_migrate = "gs_customizations.install.after_install"
 # }
 
 permission_query_conditions = {
-    "Task": "gs_customizations.validate.permissions.project_query_conditions",
-    "Task": "gs_customizations.overrides.erpnext.task.task_permissions.task_query_conditions",
+    "Task": [
+        "gs_customizations.validate.permissions.project_query_conditions",
+        "gs_customizations.overrides.erpnext.task.task_permissions.task_query_conditions",
+    ],
 }
 
 # has_permission = {

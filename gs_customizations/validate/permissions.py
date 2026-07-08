@@ -2,6 +2,17 @@
 import frappe
 from gs_customizations.utils.network_access import is_restricted_network
 
+# Roles allowed to see every employee's records (Task list views and reports)
+MANAGER_ROLES = {
+    "GS - Projects Manager",
+    "System Manager"
+}
+
+def is_manager(user=None):
+    """Check if the user holds any role that may see all employees' records"""
+    user_roles = set(frappe.get_roles(user or frappe.session.user))
+    return bool(user_roles & MANAGER_ROLES)
+
 def has_project_permission(doc, ptype=None, user=None):
     """
     Block all permission types (read, write, create, delete) from restricted network.

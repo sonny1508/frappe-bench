@@ -1,15 +1,8 @@
 import frappe
+from gs_customizations.validate.permissions import is_manager
 
 def task_query_conditions(user):
-    allowed_roles = {
-        "GS - Projects Manager",
-        "Projects Manager",
-        "System Manager"
-    }
-
-    user_roles = set(frappe.get_roles(user))
-
-    if user_roles & allowed_roles:
+    if is_manager(user):
         return ""
 
     return f"""
