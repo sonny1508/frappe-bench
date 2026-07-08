@@ -1,6 +1,11 @@
 /**
  * Kanban Horizontal Drag Scroll
- * Enables click-and-drag horizontal scrolling
+ * Enables click-and-drag horizontal scrolling.
+ *
+ * Fully delegated: no per-element setup, no init timing. Frappe caches page
+ * containers in the DOM, so querySelector(".frappe-list .result") could grab a
+ * stale page's element on first SPA navigation — resolving the scroller from
+ * e.target at mousedown time avoids that entirely.
  */
 
 (function () {
@@ -12,40 +17,38 @@
 			&& route[2]?.toLowerCase() === "kanban";
 	}
 
-	let activeScroller = null;
-	let startX = null;
-	let startLeft = null;
+	let scroller = null;
+	let startX = 0;
+	let startLeft = 0;
 
-	function enableDrag() {
-		if (!isKanbanView()) return;
+	document.addEventListener("mousedown", e => {
+		if (e.button !== 0 || !isKanbanView()) return;
 
-		const r = document.querySelector(".frappe-list .result");
-		if (!r || r.dataset.dragScroll) return;
+		// Only drag on empty board/column space — ignore cards, column
+		// headers (Sortable column reorder handle), and interactive elements
+		if (e.target.closest(
+			".kanban-card-wrapper, .kanban-column-header, .add-card, .new-card-area, a, button, input, textarea"
+		)) return;
 
-		r.dataset.dragScroll = 1;
-		activeScroller = r;
+		const r = e.target.closest(".frappe-list .result");
+		if (!r || !r.querySelector(".kanban")) return;
 
-		r.addEventListener("mousedown", e => {
-			// Only drag on empty column space — ignore clicks on cards
-			if (e.target.closest(".kanban-card")) return;
-			startX = e.pageX;
-			startLeft = r.scrollLeft;
-		});
-	}
+		// Ignore native scrollbar clicks on the scroll containers
+		const t = e.target;
+		if ((t === r || t.classList.contains("kanban-cards"))
+			&& (e.offsetX >= t.clientWidth || e.offsetY >= t.clientHeight)) return;
+
+		scroller = r;
+		startX = e.pageX;
+		startLeft = r.scrollLeft;
+	});
 
 	document.addEventListener("mousemove", e => {
-		if (startX == null || !activeScroller) return;
-		activeScroller.scrollLeft = startLeft - (e.pageX - startX);
+		if (!scroller) return;
+		scroller.scrollLeft = startLeft - (e.pageX - startX);
 	});
 
 	document.addEventListener("mouseup", () => {
-		startX = null;
+		scroller = null;
 	});
-
-	// Fires on SPA navigation
-	frappe.router.on("change", () => setTimeout(enableDrag, 500));
-
-	// Fires on initial page load (direct URL / hard refresh)
-	$(document).on("page-change", () => setTimeout(enableDrag, 500));
 })();
-

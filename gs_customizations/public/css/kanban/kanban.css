@@ -113,6 +113,14 @@ body[data-route^="List/Task/Kanban"] .kanban-column {
     contain-intrinsic-size: 300px 800px;
 }
 
+/* Skip layout/paint for cards below the fold of each column's scroll area;
+   they render as the user scrolls them into view. `auto` keeps the real
+   size once rendered so the column scrollbar stays stable. */
+body[data-route^="List/Task/Kanban"] .kanban-card-wrapper {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 110px;
+}
+
 /* ========================================
    KANBAN COLLAPSIBLE
    ======================================== */
@@ -123,19 +131,15 @@ body[data-route^="List/Task/Kanban"] .kanban-column {
 
 /* Collapsed state - hide all children by default */
 .kanban-card .kanban-card-doc > div {
-    display: none !important;
+    display: none;
 }
 
-/* Collapsed state - show only Task Type and Utilization field */
-.kanban-card .kanban-card-doc > div:has(a[data-doctype="Task Type"]),
-.kanban-card .kanban-card-doc > div[data-fieldname="custom_utilization"]
- {
-    display: block !important;
-}
-
+/* Collapsed state - show only pinned fields (class baked into the card
+   template — avoids :has(), which re-evaluates on every DOM mutation) */
+.kanban-card .kanban-card-doc > div.kanban-field-pinned,
 /* Expanded state - show all children */
 .kanban-card.expanded .kanban-card-doc > div {
-    display: block !important;
+    display: block;
 }
 
 /* Toggle button */

@@ -362,9 +362,10 @@
                             : "";
                         let value = frappe.format(card.doc[field_name], field);
 
+                        // Pinned fields stay visible when the card is collapsed
                         const isTaskType = field.fieldtype === "Link" && field.options === "Task Type";
                         const isUtilization = field_name === "custom_utilization";
-                        const inlineStyle = (isTaskType || isUtilization) ? '' : 'display: none;';
+                        const pinnedClass = (isTaskType || isUtilization) ? " kanban-field-pinned" : "";
 
                         // Bake inline-edit data attrs directly into the template
                         const fieldType = FIELDNAME_TO_TYPE[field_name];
@@ -383,7 +384,7 @@
                         }
 
                         fields.push(
-                            `<div class="text-muted text-truncate${editableClass}" data-fieldname="${field_name}"${editableAttrs} style="${inlineStyle}">${label}<span>${value}</span></div>`
+                            `<div class="text-muted text-truncate${pinnedClass}${editableClass}" data-fieldname="${field_name}"${editableAttrs}>${label}<span>${value}</span></div>`
                         );
                     }
                     return fields.join("");
