@@ -115,7 +115,7 @@ def is_checkin_enabled(user):
 # ---------------------------------------------------------------------------
 
 def get_missing_timesheet_days(employee, include_today=False):
-    """Compute the list of weekdays (Mon-Fri) in the current and previous week
+    """Compute the list of weekdays (Mon-Fri) in the current week
     that are missing or have insufficient timesheet hours.
 
     `employee` may be a dict (with name/company/date_of_joining) or an
@@ -133,8 +133,7 @@ def get_missing_timesheet_days(employee, include_today=False):
 
     today = getdate(nowdate())
     monday_this_week = today - timedelta(days=today.weekday())
-    monday_prev_week = monday_this_week - timedelta(days=7)
-    start_date = monday_prev_week
+    start_date = monday_this_week
     end_date = today if include_today else today - timedelta(days=1)
 
     if end_date < start_date:

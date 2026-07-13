@@ -31,7 +31,7 @@ Controlled by `Employee.custom_enable_timesheet_checkin` (Check, default 0). Exe
 
 ## Missing-Day Computation (`get_missing_timesheet_days`)
 
-Scans weekdays (Mon-Fri) from Monday of the previous week through yesterday (or today if `include_today=True`):
+Scans weekdays (Mon-Fri) from Monday of the current week through yesterday (or today if `include_today=True`):
 1. Skip weekends (Saturday, Sunday)
 2. Skip holidays (via `get_holiday_dates()` → `hrms.hr.utils.get_holiday_dates_for_employee`) and Absent days (via `get_absent_dates()`) — both are non-working days
 3. Skip days before `date_of_joining`
