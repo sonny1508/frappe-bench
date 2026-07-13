@@ -325,6 +325,11 @@ override_whitelisted_methods = {
     "frappe.desk.doctype.kanban_board.kanban_board.update_order_for_single_card": "gs_customizations.overrides.frappe.kanban_board.kanban_board.update_order_for_single_card",
     "frappe.desk.doctype.kanban_board.kanban_board.add_card": "gs_customizations.overrides.frappe.kanban_board.kanban_board.add_card",
 
+    # Expire Allocation button calls the stock HRMS method, which sums the standard `leaves`
+    # (days) field and is a no-op in our seconds-based system. Route it to the duration-aware
+    # override so it actually voids the remaining balance.
+    "hrms.hr.doctype.leave_ledger_entry.leave_ledger_entry.expire_allocation": "gs_customizations.overrides.hrms.leave_ledger_entry.leave_ledger_entry.expire_allocation",
+
     # "erpnext.projects.doctype.task.task.make_timesheet": "gs_customizations.overrides.erpnext.task.task.make_timesheet",
 }
 

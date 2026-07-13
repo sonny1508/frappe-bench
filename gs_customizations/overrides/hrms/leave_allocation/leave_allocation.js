@@ -7,6 +7,60 @@ frappe.ui.form.on("Leave Allocation", {
 				frm.trigger("add_allocate_leaves_button");
 			});
 		}
+
+		// Replace the stock "Expire Allocation" button with one that lets HR choose the
+		// expiry date. The whitelisted method is routed (via hooks) to the duration-aware
+		// override, which voids the full remaining balance of this allocation (reset to 0).
+		if (frm.doc.docstatus === 1 && !frm.doc.expired) {
+			const valid_expiry = moment(frappe.datetime.get_today()).isBetween(
+				frm.doc.from_date,
+				frm.doc.to_date,
+			);
+			if (valid_expiry) {
+				frm.remove_custom_button(__("Expire Allocation"), __("Actions"));
+				frm.add_custom_button(
+					__("Expire Allocation"),
+					function () {
+						const dialog = new frappe.ui.Dialog({
+							title: __("Expire Allocation"),
+							fields: [
+								{
+									label: __("Expiry Date"),
+									fieldname: "expiry_date",
+									fieldtype: "Date",
+									reqd: 1,
+									default: frappe.datetime.get_today(),
+									description: __(
+										"The full remaining balance of this allocation will be voided (reset to 0), recorded on this date.",
+									),
+								},
+							],
+							primary_action_label: __("Expire"),
+							primary_action({ expiry_date }) {
+								frappe.call({
+									method: "hrms.hr.doctype.leave_ledger_entry.leave_ledger_entry.expire_allocation",
+									args: { allocation: frm.doc, expiry_date: expiry_date },
+									freeze: true,
+									callback: function (r) {
+										if (!r.exc) {
+											dialog.hide();
+											frappe.msgprint(__("Allocation Expired!"));
+											frm.refresh();
+										}
+									},
+								});
+							},
+						});
+						dialog.fields_dict.expiry_date.datepicker?.update({
+							minDate: frappe.datetime.str_to_obj(frm.doc.from_date),
+							maxDate: frappe.datetime.str_to_obj(frm.doc.to_date),
+						});
+						dialog.show();
+					},
+					__("Actions"),
+				);
+			}
+		}
 	},
 
 	add_allocate_leaves_button: async function (frm) {

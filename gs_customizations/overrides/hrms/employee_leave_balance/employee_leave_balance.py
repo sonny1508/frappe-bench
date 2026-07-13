@@ -2,7 +2,7 @@ from itertools import groupby
 
 import frappe
 from frappe import _
-from frappe.query_builder.functions import Abs, Sum
+from frappe.query_builder.functions import Sum
 from frappe.utils import add_days, cint, flt, getdate
 
 from hrms.hr.report.employee_leave_balance import (
@@ -164,9 +164,13 @@ def get_allocated_leaves(from_date, to_date, employee, leave_type):
 
 def get_expired_leaves(from_date, to_date, employee, leave_type):
 	ledger = frappe.qb.DocType("Leave Ledger Entry")
+	# Signed (not Abs): normal expiries store a negative amount, so -Sum shows them as a
+	# positive "expired" figure exactly like before. A *positive* is_expired entry (used to
+	# clear a negative/owed balance at reset) therefore shows as a negative expired figure,
+	# and the closing formula (allocated + opening - (expired + taken)) stays correct for both.
 	expired_leaves = (
 		frappe.qb.from_(ledger)
-		.select(Abs(Sum(ledger.custom_time_leaves)))
+		.select(Sum(ledger.custom_time_leaves) * -1)
 		.where(
 			(ledger.docstatus == 1)
 			& (ledger.transaction_type == "Leave Allocation")
