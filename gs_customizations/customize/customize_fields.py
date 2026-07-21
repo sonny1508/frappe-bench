@@ -581,7 +581,7 @@ def custom_task():
 				"insert_after": "parent_task",
 				"is_system_generated": 0,
 				"label": "Reviewer",
-				"read_only": 1,
+				"read_only": 0,
 			},
 			{
 				"fieldname": "custom_utilization",
