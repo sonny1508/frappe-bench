@@ -69,6 +69,13 @@ frappe.ui.form.on("Leave Allocation", {
 			doc: frm.doc,
 		});
 
+		// The stock HRMS script registers its own "Allocate Leaves" handler whose input is a
+		// plain Float. Since `add_inner_button` de-dupes by label, whichever handler runs
+		// first wins - and when the stock one won, the field took a raw seconds value
+		// (6 hours had to be entered as 21600). Drop it so ours (a Duration input, entered
+		// in hours/minutes) is always the one on screen.
+		frm.remove_custom_button(__("Allocate Leaves"), __("Actions"));
+
 		frm.add_custom_button(
 			__("Allocate Leaves"),
 			function () {
@@ -79,6 +86,7 @@ frappe.ui.form.on("Leave Allocation", {
 							label: "New Leaves to be Allocated",
 							fieldname: "new_leaves",
 							fieldtype: "Duration",
+							hide_days: 1,
 							hide_seconds: 1,
 							reqd: 1,
 						},

@@ -140,7 +140,10 @@ def get_data(filters: Filters) -> list[dict]:
 			Ledger.leave_type,
 			Ledger.transaction_type,
 			Ledger.transaction_name,
-			Ledger.custom_time_leaves,
+			# aliased to `leaves` so it lands under the "Leaves" column, which is a Duration
+			# (seconds). Without the alias the column stayed empty and only the total row
+			# rendered, because the value came back under `custom_time_leaves`.
+			Ledger.custom_time_leaves.as_("leaves"),
 			Ledger.is_carry_forward,
 			Ledger.is_expired,
 			Ledger.is_lwp,
@@ -193,7 +196,7 @@ def add_total_row(result: list[dict], filters: Filters) -> list[dict]:
 		return result
 
 	total_row = frappe._dict({"employee": _("Total Leaves ({0})").format(leave_type)})
-	total_row["leaves"] = sum((row.get("custom_time_leaves") or 0) for row in result)
+	total_row["leaves"] = sum((row.get("leaves") or 0) for row in result)
 
 	result.append(total_row)
 	return result
