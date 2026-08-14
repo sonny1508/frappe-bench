@@ -151,22 +151,45 @@ def set_color_by_priority(doc):
 
 
 # Task fields permissions
+
+# Completion metadata is derived by the server from the assignment and the status
+# change (see auto_update), never from what the client submits.
+COMPLETION_FIELDS = ['completed_by', 'completed_on', 'custom_completed_by_employee']
+
+
+def discard_client_completion_fields(doc):
+	"""Roll completion metadata back to its stored values.
+
+	The Task form fills these in client-side when status becomes 'Completed'
+	(see task.js). For non-managers those values would otherwise register as
+	restricted field changes below. Dropping them here both keeps the field
+	guard focused on 'status' and stops the values from being forged - auto_update
+	recomputes them from the ToDo assignment once validation has passed.
+	"""
+	db_values = frappe.db.get_value("Task", doc.name, COMPLETION_FIELDS, as_dict=True) or {}
+
+	for fieldname in COMPLETION_FIELDS:
+		doc.set(fieldname, db_values.get(fieldname))
+
+
 def validate_task_fields_permissions(doc):
 	session_roles = frappe.get_roles(frappe.session.user)
 
 	manager_roles = frappe.conf.get("manager_roles") or []
-	
+
 	if any(role in manager_roles for role in session_roles):
 		return
-	
+
 	# Skip new documents
 	if doc.is_new():
 		return
-	
+
+	discard_client_completion_fields(doc)
+
 	# Fields that GS - Projects User is allowed to modify (when assigned)
 	allowed_fields = ['status']
 
-	
+
 	# Get changed fields by directly comparing with database
 	changed_fields = get_changed_fields_from_db(doc, allowed_fields)
 	
@@ -359,34 +382,35 @@ def auto_set_fields_on_todo(doc):
 	"""Update Task's custom_assign_to when assigned"""
 	if doc.is_new():
 		return
-	
-	todo = frappe.db.get_value(
+
+	assignees = frappe.get_all(
 		"ToDo",
-		{
+		filters={
 			"reference_type": "Task",
 			"reference_name": doc.name,
 			"status": ["not in", ["Closed", "Cancelled"]]
 		},
-		"allocated_to"
+		pluck="allocated_to"
 	)
-	if todo:
-		employee = frappe.db.get_value(
-			"Employee",
-			{"user_id": todo},
-			"name"
-		)
+	todo = assignees[0] if assignees else None
 
 	from frappe.utils import get_fullname
-	full_name = get_fullname(todo)
 
 	if doc.status in ["Completed", "Closed"]:
-		if todo:
-			if not doc.completed_by:
-				doc.completed_by = employee
-				doc.custom_completed_by_employee = full_name
+		# Credit the user who did the completing when they are one of the
+		# assignees, so multi-assignee tasks don't credit an arbitrary one.
+		completed_by = frappe.session.user if frappe.session.user in assignees else todo
+
+		if completed_by and not doc.completed_by:
+			doc.completed_by = frappe.db.get_value(
+				"Employee",
+				{"user_id": completed_by},
+				"name"
+			)
+			doc.custom_completed_by_employee = get_fullname(completed_by)
 	else:
 		if todo:
-			doc.custom_assign_to_employee = full_name
+			doc.custom_assign_to_employee = get_fullname(todo)
 			doc.custom_assign_to_id = todo
 		else:
 			doc.custom_assign_to_employee = ""
