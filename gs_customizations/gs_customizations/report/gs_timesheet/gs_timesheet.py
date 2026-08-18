@@ -43,13 +43,19 @@ def get_column():
 
 
 def get_data(conditions, filters):
+	# Task Name is read live from `tabTask`.subject rather than the stored
+	# custom_task_name snapshot: a submitted timesheet never saves again, so
+	# its fetched copy freezes at submit time and goes stale if the task is
+	# later renamed. custom_task_name is kept only as a fallback for rows
+	# whose Task no longer exists.
 	time_sheet = frappe.db.sql(
 		"""
 		select
 		`tabTimesheet`.name, `tabTimesheet`.employee, `tabTimesheet`.employee_name,
 		`tabTimesheet Detail`.from_time, `tabTimesheet Detail`.to_time, `tabTimesheet Detail`.hours,
 		`tabTimesheet Detail`.activity_type, `tabProject`.project_name,
-		`tabTimesheet Detail`.task, `tabTimesheet Detail`.custom_task_name,
+		`tabTimesheet Detail`.task,
+		coalesce(`tabTask`.subject, `tabTimesheet Detail`.custom_task_name) as task_name,
 		`tabTimesheet Detail`.completed,
 		`tabIssue`.subject as issue_name,
 		`tabTask`.custom_reviewer as reviewer_name

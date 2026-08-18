@@ -12,6 +12,7 @@ def apply_custom_fields():
 	custom_employee()
 	custom_task()
 	custom_timesheet()
+	custom_timesheet_detail()
 
 def apply_custom_properties():
 	property_company()
@@ -681,6 +682,41 @@ def custom_timesheet():
 				"insert_after": "total_hours",
 				"is_system_generated": 0,
 				"label": "Daily Hours Summary",
+			},
+		]
+	})
+
+def custom_timesheet_detail():
+	# fetch_if_empty must stay 0 on both fields. With it set, Frappe's
+	# _validate_links() skips any row that already has a value, so a task
+	# renamed after the row was first filled keeps the stale copy forever
+	# (see base_document.py: fields_to_fetch). With it off, every save —
+	# including the save that submits the timesheet — re-reads the Task.
+	create_custom_fields({
+		"Timesheet Detail": [
+			{
+				"columns": 2,
+				"fetch_from": "task.subject",
+				"fetch_if_empty": 0,
+				"fieldname": "custom_task_name",
+				"fieldtype": "Data",
+				"in_list_view": 1,
+				"insert_after": "task",
+				"is_system_generated": 0,
+				"label": "Task Name",
+				"read_only": 1,
+			},
+			{
+				"columns": 1,
+				"fetch_from": "task.type",
+				"fetch_if_empty": 0,
+				"fieldname": "custom_task_type",
+				"fieldtype": "Data",
+				"in_list_view": 1,
+				"insert_after": "custom_task_name",
+				"is_system_generated": 0,
+				"label": "Task Type",
+				"read_only": 1,
 			},
 		]
 	})
