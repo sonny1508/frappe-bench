@@ -59,6 +59,7 @@ gs_customizations/
     bot.py                             # HTTP client — all Matrix/Synapse API calls
     provisioning.py                    # DM room creation logic
     notifications.py                   # Task notification hooks (mirrors synology.py)
+    polls.py                           # Food poll reading + MSC3381 tally
 
   matrix_integration/                  # Frappe module (DocTypes)
     __init__.py
@@ -73,7 +74,18 @@ gs_customizations/
       matrix_group_room/               # Child table for group rooms
         matrix_group_room.json
         matrix_group_room.py
+      food_poll/                       # Daily food vote record
+        food_poll.json
+        food_poll.py
+        food_poll.js
+        food_poll_list.js
+      food_poll_option/                # Child table — menu options
+      food_poll_vote/                  # Child table — one row per person
 ```
+
+See `food-polls.md` for the food poll workflow. It is deliberately separate
+from Matrix Settings so the producer can record votes without access to the
+bot token.
 
 ## Related files (not in matrix/)
 

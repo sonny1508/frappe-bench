@@ -1,0 +1,115 @@
+{
+ "actions": [],
+ "creation": "2026-08-18 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "employee",
+  "employee_name",
+  "option_text",
+  "status",
+  "source",
+  "column_break_identity",
+  "matrix_user_id",
+  "display_name",
+  "option_id",
+  "voted_on",
+  "note"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Employee",
+   "options": "Employee",
+   "description": "Resolved from the Matrix user ID; blank if the voter has no Employee record"
+  },
+  {
+   "columns": 2,
+   "fetch_from": "employee.employee_name",
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Name",
+   "read_only": 1
+  },
+  {
+   "columns": 3,
+   "fieldname": "option_text",
+   "fieldtype": "Autocomplete",
+   "in_list_view": 1,
+   "label": "Option",
+   "reqd": 1,
+   "description": "Free text is allowed for off-menu requests"
+  },
+  {
+   "columns": 1,
+   "default": "Voted",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Voted\nWithdrawn",
+   "description": "Withdrawn = voted in Element then pressed Undo. Not counted in totals."
+  },
+  {
+   "columns": 1,
+   "default": "Manual",
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Source",
+   "options": "Matrix\nManual",
+   "read_only": 1,
+   "description": "Matrix rows are replaced on re-sync; Manual rows are never touched"
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "matrix_user_id",
+   "fieldtype": "Data",
+   "label": "Matrix User ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "display_name",
+   "fieldtype": "Data",
+   "label": "Element Display Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "option_id",
+   "fieldtype": "Data",
+   "label": "Option ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "voted_on",
+   "fieldtype": "Datetime",
+   "label": "Voted On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Note",
+   "description": "e.g. \"DM'd after the poll closed\""
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-18 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Matrix Integration",
+ "name": "Food Poll Vote",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

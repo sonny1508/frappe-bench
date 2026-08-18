@@ -1,0 +1,222 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2026-08-18 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "poll_date",
+  "meal",
+  "column_break_header",
+  "question",
+  "total_votes",
+  "title",
+  "section_summary",
+  "summary",
+  "section_options",
+  "options",
+  "section_votes",
+  "votes",
+  "section_source",
+  "matrix_link",
+  "column_break_source",
+  "room_id",
+  "poll_event_id",
+  "poll_sender",
+  "poll_ended",
+  "started_on",
+  "ended_on",
+  "synced_on",
+  "synced_by"
+ ],
+ "fields": [
+  {
+   "default": "FOOD-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "FOOD-.YYYY.-.#####",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "poll_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Date",
+   "reqd": 1,
+   "description": "The day the food is for"
+  },
+  {
+   "default": "Lunch",
+   "fieldname": "meal",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Meal",
+   "options": "Lunch\nDinner\nOther",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "question",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Question",
+   "description": "The poll question as asked in Element, e.g. \"Menu T2?\""
+  },
+  {
+   "fieldname": "total_votes",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Total Votes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Title",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "section_summary",
+   "fieldtype": "Section Break",
+   "label": "Order Summary"
+  },
+  {
+   "fieldname": "summary",
+   "fieldtype": "Small Text",
+   "label": "Summary",
+   "read_only": 1,
+   "description": "Auto-generated on save from the Votes table — ready to copy to the restaurant"
+  },
+  {
+   "fieldname": "section_options",
+   "fieldtype": "Section Break",
+   "label": "Options"
+  },
+  {
+   "fieldname": "options",
+   "fieldtype": "Table",
+   "label": "Options",
+   "options": "Food Poll Option",
+   "description": "Every option offered in the poll, including those nobody picked. Add rows here for off-menu items."
+  },
+  {
+   "fieldname": "section_votes",
+   "fieldtype": "Section Break",
+   "label": "Votes"
+  },
+  {
+   "fieldname": "votes",
+   "fieldtype": "Table",
+   "label": "Votes",
+   "options": "Food Poll Vote",
+   "description": "One row per person. Add rows for late votes that came in by DM — they are kept when the poll is re-synced."
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_source",
+   "fieldtype": "Section Break",
+   "label": "Matrix Source"
+  },
+  {
+   "fieldname": "matrix_link",
+   "fieldtype": "Small Text",
+   "label": "Matrix Poll Link",
+   "description": "Paste the poll's permalink from Element (Share → Copy link), then use Fetch from Matrix"
+  },
+  {
+   "fieldname": "column_break_source",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "room_id",
+   "fieldtype": "Data",
+   "label": "Room ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "poll_event_id",
+   "fieldtype": "Data",
+   "label": "Poll Event ID",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Identifies the poll. Re-importing the same link updates this document instead of creating a new one."
+  },
+  {
+   "fieldname": "poll_sender",
+   "fieldtype": "Data",
+   "label": "Created By (Matrix)",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "poll_ended",
+   "fieldtype": "Check",
+   "label": "Poll Ended",
+   "read_only": 1
+  },
+  {
+   "fieldname": "started_on",
+   "fieldtype": "Datetime",
+   "label": "Poll Started",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ended_on",
+   "fieldtype": "Datetime",
+   "label": "Poll Ended On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "synced_on",
+   "fieldtype": "Datetime",
+   "label": "Last Synced",
+   "read_only": 1
+  },
+  {
+   "fieldname": "synced_by",
+   "fieldtype": "Link",
+   "label": "Last Synced By",
+   "options": "User",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-18 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Matrix Integration",
+ "name": "Food Poll",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "poll_date,meal,question",
+ "sort_field": "poll_date",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}
