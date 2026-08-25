@@ -227,6 +227,10 @@ doc_events = {
     "ToDo": {
         "before_insert": "gs_customizations.validate.permissions.block_assign",
         "after_insert": [
+            # Stamp Task.exp_start_date with the assignment date. Kept FIRST:
+            # notify_todo_insert below does an unguarded get_doc("Task", ...) and
+            # would abort the rest of the chain if the Task were missing.
+            "gs_customizations.overrides.erpnext.task.task.set_exp_start_date_from_assignment",
             # "gs_customizations.synology.synology.notify_todo_insert",
             "gs_customizations.matrix.notifications.notify_todo_insert"
         ]

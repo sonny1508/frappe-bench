@@ -3,6 +3,7 @@ from frappe import _, throw
 
 from frappe.utils import now_datetime
 from frappe.utils import flt
+from frappe.utils import getdate
 
 from frappe.desk.form.assign_to import clear, close_all_assignments
 from frappe.model.mapper import get_mapped_doc
@@ -93,6 +94,7 @@ def auto_update(doc):
 	# auto_update_completed_by(doc)
 	auto_update_completed_on(doc)
 
+	preserve_exp_start_date(doc)
 	auto_set_fields_on_todo(doc)
 	auto_set_reviewer(doc)
 	auto_update_tag_on_status(doc)
@@ -442,3 +444,206 @@ def get_employee_from_todo(task_name):
         return employee
     
     return None
+
+# ---------------------------------------------------------------------------
+# Expected Start Date, derived from the assignment
+#
+# exp_start_date is server-owned on this site: it records the date an assignee
+# was added to the Task, and is re-stamped every time an assignee is removed and
+# assigned again - same person or not. Three code paths write it, and all three
+# go through the two helpers below so they cannot drift apart:
+#
+#   1. set_exp_start_date_from_assignment()   ToDo after_insert   (live)
+#   2. preserve_exp_start_date()              Task validate       (anti-clobber)
+#   3. maintenance/task_exp_start_backfill.py                     (one-off sweep)
+# ---------------------------------------------------------------------------
+
+
+def resolve_assignment_date(todo_creation):
+	"""The single definition of "the date an assignee was added".
+
+	Always the ToDo row's `creation`. ToDo.date is the *due* date - assign_to.add()
+	merely seeds it from nowdate() and it is freely edited afterwards - so it is
+	the wrong column for this.
+
+	Read off the row rather than from nowdate() so the live hook and the backfill
+	derive the same value from the same input, and so the rule stays testable
+	without freezing the clock.
+	"""
+	return getdate(todo_creation)
+
+
+def exp_start_date_block_reason(assignment_date, exp_end_date=None, project_end_date=None):
+	"""Reason string if writing `assignment_date` would break Task validation, else None.
+
+	erpnext's Task.validate_dates() runs validate_from_to_dates("exp_start_date",
+	"exp_end_date") and validate_parent_project_dates(); both raise InvalidDates.
+	Neither runs on our write, because we go through frappe.db.set_value - so a bad
+	value is not rejected at write time, it detonates on the NEXT ordinary save by
+	any user and leaves the Task un-editable until someone with DB access fixes it.
+
+	So we refuse the write instead. Clamping to the bound was considered and
+	rejected: the field's whole contract is "the date the assignee was assigned",
+	and a clamped date is silently wrong data that looks correct. A NULL is
+	honestly absent - and NULL is what every one of these tasks holds today.
+
+	Deliberately a pure function over scalars: the live hook looks the bounds up
+	with one get_value, the backfill already has them from its JOIN, and neither
+	can drift from the other.
+	"""
+	assignment_date = getdate(assignment_date)
+
+	if exp_end_date and assignment_date > getdate(exp_end_date):
+		return "after-exp-end-date"
+
+	if project_end_date and assignment_date > getdate(project_end_date):
+		return "after-project-end-date"
+
+	return None
+
+
+def set_exp_start_date_from_assignment(doc, method=None):
+	"""Stamp Task.exp_start_date with the day this assignee was added.
+
+	Hooked to: ToDo -> after_insert.
+
+	after_insert, not on_update: a ToDo row is inserted exactly once per assignment,
+	while un-assigning only flips `status` (assign_to.remove -> Cancelled,
+	close_all_assignments -> Closed, clear -> Cancelled, all via todo.save()). And
+	a genuine remove-then-re-add clears the Open-status duplicate guard in
+	assign_to.add(), inserting a NEW row with a new `creation` - so "re-stamp every
+	time the assignee is removed and assigned again" falls out of the framework for
+	free, for the same person as well as a different one.
+
+	Writes with frappe.db.set_value(update_modified=False) rather than doc.save():
+
+	  * doc.save() would re-run the entire Task lifecycle from inside the ToDo
+		insert transaction - validate_status, update_depends_on,
+		validate_task_fields_permissions, then on_update -> update_nsm_model,
+		check_recursion, reschedule_dependent_tasks, update_project (which re-costs
+		the whole Project) and notify_task_update (a Matrix HTTP call per
+		assignment).
+	  * update_modified=False keeps `modified` still. The assigning manager has the
+		Task form open - assign_to.js re-renders the sidebar avatars but never
+		reloads the doc - so bumping `modified` would hand them "Document has been
+		modified after you have opened it" on their very next save.
+	  * It is the framework's own precedent: ToDo.update_in_reference() writes the
+		parent's `_assign` exactly this way, from this exact event.
+
+	Consequence worth knowing: db.set_value writes no Version row, so changes to
+	this field do not appear in the Task's document history. The `tabToDo` rows are
+	the audit trail.
+
+	Never raises. This runs inside the assignment's own transaction, and a
+	bookkeeping field must not be able to fail an assignment.
+	"""
+	try:
+		if doc.reference_type != "Task" or not doc.reference_name:
+			return
+
+		# A real assignment is always inserted Open by assign_to.add(); anything
+		# else was hand-made in the ToDo list view and is not an assignment event.
+		# A role-based ToDo has no allocated_to and is not an assignment to a person.
+		if doc.status != "Open" or not doc.allocated_to:
+			return
+
+		task = frappe.db.get_value(
+			"Task",
+			doc.reference_name,
+			["name", "exp_start_date", "exp_end_date", "act_start_date", "project"],
+			as_dict=True,
+		)
+		if not task:
+			return
+
+		# Once a submitted Timesheet has stamped a real start date (via
+		# Task.update_time_and_costing), the expected start date is settled history.
+		if task.act_start_date:
+			return
+
+		assignment_date = resolve_assignment_date(doc.creation)
+
+		# Same-day re-assignment: skip the pointless UPDATE and cache bust.
+		if task.exp_start_date and getdate(task.exp_start_date) == assignment_date:
+			return
+
+		project_end_date = (
+			frappe.db.get_value("Project", task.project, "expected_end_date")
+			if task.project
+			else None
+		)
+
+		reason = exp_start_date_block_reason(
+			assignment_date, task.exp_end_date, project_end_date
+		)
+		if reason:
+			# An expected outcome under a specific data shape, not a bug - so it
+			# goes to the app log, not the Error Log, where predictable noise would
+			# train people to ignore genuine failures.
+			frappe.logger("gs_customizations").warning(
+				"exp_start_date skipped for Task {0}: assignment date {1} is {2} "
+				"(exp_end_date={3}, project_end_date={4})".format(
+					task.name, assignment_date, reason, task.exp_end_date, project_end_date
+				)
+			)
+			return
+
+		frappe.db.set_value(
+			"Task",
+			task.name,
+			"exp_start_date",
+			assignment_date,
+			update_modified=False,
+		)
+
+	except Exception:
+		# The assignment must succeed even if this does not.
+		# defer_insert pushes the Error Log through redis instead of the current
+		# transaction: assign_to.add() can still frappe.throw() *after* this hook
+		# (it checks assignee permissions afterwards), and a rollback would
+		# otherwise take the error record down with it.
+		frappe.log_error(
+			frappe.get_traceback(),
+			"gs_customizations: exp_start_date from assignment failed",
+			defer_insert=True,
+		)
+
+
+def preserve_exp_start_date(doc):
+	"""Stop a stale form from silently wiping the server-set exp_start_date.
+
+	set_exp_start_date_from_assignment() deliberately writes with
+	update_modified=False, so a Task form that was already open when the assignment
+	happened still holds the pre-assignment value AND still passes check_if_latest().
+	Saving it would write that stale blank straight back over ours - and nothing
+	would restore it, because an ordinary save inserts no ToDo row and the live hook
+	never fires again.
+
+	GS - Projects User is already covered by the framework: exp_start_date is
+	permlevel 1 (Property Setter Task-exp_start_date-permlevel) and that role has
+	read-but-not-write there, so Document.validate_higher_perm_levels() resets the
+	field from a fresh DB read before validate runs. GS - Projects Manager and
+	System Manager DO hold permlevel 1 write, are exempt from
+	validate_task_fields_permissions(), and are the only roles block_assign() lets
+	assign in the first place - so they are exactly who this is for.
+
+	Restore-only: a manager who types a real date still gets to set it. Only a blank
+	posted over a stored value is treated as stale. The trade-off is that the field
+	can no longer be *cleared* from the form - a deliberate blank and a stale blank
+	are indistinguishable, both arriving with a matching `modified`. Clearing is
+	available through maintenance/task_exp_start_backfill.revert().
+
+	Note this never re-derives a date from ToDo. CustomTask.validate() - and so
+	validate_dates() - has already run by the time this doc_event fires, so any new
+	value set here would escape validation entirely. The value restored here was
+	bound-checked by exp_start_date_block_reason() when it was first written.
+	"""
+	if doc.is_new():
+		return
+
+	if doc.exp_start_date:
+		return
+
+	stored = frappe.db.get_value("Task", doc.name, "exp_start_date")
+	if stored:
+		doc.exp_start_date = stored
