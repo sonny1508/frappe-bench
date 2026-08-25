@@ -25,6 +25,17 @@ frappe.query_reports["GS Task Sheet"] = {
             },
         },
         {
+            fieldname: "date_field",
+            label: __("Date Filter On"),
+            fieldtype: "Select",
+            options: [
+                { value: "completed_on", label: __("Completed On") },
+                { value: "exp_start_date", label: __("Expected Start Date") }
+            ],
+            default: "completed_on",
+            reqd: 1,
+        },
+        {
             fieldname: "month",
             label: __("Month"),
             fieldtype: "Select",
@@ -65,12 +76,6 @@ frappe.query_reports["GS Task Sheet"] = {
             fieldtype: "Date",
             depends_on: "eval:doc.filter_based_on == 'Date Range'",
             on_change: validate_date_range,
-        },
-        {
-            fieldname: "project",
-            label: __("Project"),
-            fieldtype: "Link",
-            options: "Project"
         },
         {
             fieldname: "status",

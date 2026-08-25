@@ -3,6 +3,23 @@ from frappe import _
 from frappe.utils import cint, getdate, get_first_day, get_last_day
 from gs_customizations.validate.permissions import is_manager
 
+# Task columns the date range may be applied to. The chosen value is
+# interpolated into the WHERE clause, so it is resolved through this whitelist -
+# a filter value is client-supplied and must never reach SQL directly.
+DATE_FIELDS = ("completed_on", "exp_start_date")
+DEFAULT_DATE_FIELD = "completed_on"
+
+
+def get_date_field(filters):
+    """Which Task date column the Month / Date Range filter applies to."""
+    field = filters.get("date_field") or DEFAULT_DATE_FIELD
+
+    if field not in DATE_FIELDS:
+        frappe.throw(_("Invalid date field: {0}").format(field))
+
+    return field
+
+
 def execute(filters=None):
     """
     Main execution function for the GS Task Sheet Report
@@ -100,6 +117,12 @@ def get_columns(filters):
             "label": _("Is Group"),
             "fieldtype": "Check",
             "width": 80
+        },
+        {
+            "fieldname": "exp_start_date",
+            "label": _("Expected Start Date"),
+            "fieldtype": "Date",
+            "width": 130
         }
     ])
 
@@ -193,6 +216,7 @@ def get_data(filters):
             status,
             type,
             is_group,
+            exp_start_date,
             completed_by,
             custom_completed_by_employee,
             completed_on,
@@ -222,7 +246,10 @@ def get_data(filters):
 def get_conditions(filters):
     """Build SQL conditions based on filters"""
     conditions = ""
-    
+
+    # Safe to interpolate: get_date_field() resolves through a whitelist.
+    date_field = get_date_field(filters)
+
     # Date filtering - same approach as HRMS
     if filters.filter_based_on == "Month":
         if filters.month and filters.year:
@@ -232,17 +259,13 @@ def get_conditions(filters):
             # Get first and last day of the selected month
             first_day = get_first_day(f"{year}-{month:02d}-01")
             last_day = get_last_day(f"{year}-{month:02d}-01")
-            conditions += f" AND completed_on BETWEEN '{first_day}' AND '{last_day}'"
+            conditions += f" AND {date_field} BETWEEN '{first_day}' AND '{last_day}'"
     
     elif filters.filter_based_on == "Date Range":
         if filters.start_date:
-            conditions += " AND completed_on >= %(start_date)s"
+            conditions += f" AND {date_field} >= %(start_date)s"
         if filters.end_date:
-            conditions += " AND completed_on <= %(end_date)s"
-    
-    # Project filter
-    if filters.get("project"):
-        conditions += " AND project = %(project)s"
+            conditions += f" AND {date_field} <= %(end_date)s"
     
     # Status filter - handle "Closed" vs "Completed"
     if filters.get("status"):
@@ -321,6 +344,7 @@ def process_grouped_data(data):
             "actual_time_days": total_actual_days,
             "utilization": total_utilization,
             "completed_on": "",
+            "exp_start_date": "",
             "indent": 0,
         }
         result.append(parent_row)
