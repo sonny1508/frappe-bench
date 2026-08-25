@@ -121,7 +121,23 @@ def delete_ledger_entry(ledger):
 
 
 def get_previous_expiry_ledger_entry(ledger):
-	"""Returns the expiry ledger entry having same creation date as the ledger entry to be cancelled"""
+	"""Returns the expiry ledger entry having same creation date as the ledger entry to be cancelled
+
+	Only meaningful when cancelling a Leave Allocation: the paired expiry entry belongs to
+	the allocation, never to a Leave Application. Cancelling an application must not touch
+	expiry entries at all.
+
+	Upstream HRMS has no such guard, which silently destroyed data: for a Leave Application
+	the `creation_date` lookup below filters on transaction_type="Leave Allocation" under the
+	*application's* name, so it never matches and falls back to "". That made the second query
+	`creation LIKE "%"` -- matching ANY of the employee's expiry entries -- and delete_ledger_entry
+	then hard-DELETEd it via raw SQL, leaving no docstatus=2, no Version and no Deleted Document.
+	Cancelling one leave application therefore wiped that employee's mid-year expiry entry and
+	handed the expired hours back. Cost us HR-EMP-00026 (22/07) and HR-EMP-00001 (18/08).
+	"""
+	if ledger.transaction_type != "Leave Allocation":
+		return None
+
 	creation_date = frappe.db.get_value(
 		"Leave Ledger Entry",
 		filters={
@@ -132,7 +148,12 @@ def get_previous_expiry_ledger_entry(ledger):
 		fieldname=["creation"],
 	)
 
-	creation_date = creation_date.strftime(DATE_FORMAT) if creation_date else ""
+	# no paired allocation entry -> nothing to match against. Never fall back to "" here:
+	# `creation LIKE "%"` matches every row and deletes an unrelated expiry entry.
+	if not creation_date:
+		return None
+
+	creation_date = creation_date.strftime(DATE_FORMAT)
 
 	return frappe.db.get_value(
 		"Leave Ledger Entry",
