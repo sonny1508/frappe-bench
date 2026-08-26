@@ -112,8 +112,8 @@ frappe.query_reports["GS Task Sheet"] = {
             }
         },
         {
-            fieldname: "group_by_employee",
-            label: __("Group By Employee"),
+            fieldname: "group_by_assignee",
+            label: __("Group By Assignee"),
             fieldtype: "Check",
             default: 0,
             on_change: (report) => {
@@ -134,6 +134,8 @@ frappe.query_reports["GS Task Sheet"] = {
     ],
     
     onload: function(report) {
+        size_filters_to_content(report);
+
         // Populate year options
         let year_filter = report.filters.find(f => f.df.fieldname === "year");
         if (year_filter) {
@@ -184,6 +186,46 @@ frappe.query_reports["GS Task Sheet"] = {
         return value;
     }
 };
+
+// Query report filters render as bare inputs (page.js add_field passes
+// only_input, so the label becomes the placeholder) and carry no width of their
+// own - they fall back to an input's intrinsic ~180px each. With eight filters
+// that overflows the row and orphans the last checkbox on a line by itself.
+//
+// So each one is sized to what it actually holds. Scoped to this report's page
+// wrapper: .page-form is every report's filter bar, and an unscoped rule would
+// resize filters on every report in the desk.
+const FILTER_WIDTHS = {
+    filter_based_on: 150,
+    date_field: 165,
+    month: 90,
+    year: 90,
+    start_date: 120,
+    end_date: 120,
+    status: 185,
+};
+const FILTER_STYLE_ID = "gs-task-sheet-filter-style";
+const PAGE_SCOPE_CLASS = "gs-task-sheet-page";
+
+function size_filters_to_content(report) {
+    if (!report || !report.page || !report.page.wrapper) return;
+
+    report.page.wrapper.addClass(PAGE_SCOPE_CLASS);
+
+    if (document.getElementById(FILTER_STYLE_ID)) return;
+
+    // data-fieldname sits on the control wrapper for some fieldtypes and on the
+    // input itself for others, so the selector deliberately matches either.
+    const rules = Object.keys(FILTER_WIDTHS).map((fieldname) =>
+        `.${PAGE_SCOPE_CLASS} .page-form [data-fieldname="${fieldname}"]` +
+        ` { width: ${FILTER_WIDTHS[fieldname]}px; min-width: 0; }`
+    );
+
+    const style = document.createElement("style");
+    style.id = FILTER_STYLE_ID;
+    style.textContent = rules.join("\n");
+    document.head.appendChild(style);
+}
 
 // The two "In Days" columns are derived (hours / 8) and mostly just cost
 // horizontal scroll, so they are hidden unless "Show MDs" is ticked.

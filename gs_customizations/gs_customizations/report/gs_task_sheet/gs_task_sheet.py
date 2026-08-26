@@ -58,6 +58,12 @@ def get_columns():
     """
     return [
         {
+            "fieldname": "custom_assign_to_employee",
+            "label": _("Assigned To"),
+            "fieldtype": "Data",
+            "width": 150
+        },
+        {
             "fieldname": "name",
             "label": _("ID"),
             "fieldtype": "Link",
@@ -106,12 +112,6 @@ def get_columns():
             "label": _("Expected Start Date"),
             "fieldtype": "Date",
             "width": 130
-        },
-        {
-            "fieldname": "custom_assign_to_employee",
-            "label": _("Assigned To"),
-            "fieldtype": "Data",
-            "width": 150
         },
         {
             "fieldname": "completed_by",
@@ -213,7 +213,7 @@ def get_data(filters):
         row["utilization"] = calculate_utilization(row.get("actual_time"), row.get("expected_time"))
 
     # Process data for grouping if needed
-    if filters.get("group_by_employee") and data:
+    if filters.get("group_by_assignee") and data:
         data = process_grouped_data(data)
     
     return data
@@ -310,9 +310,9 @@ def process_grouped_data(data):
     # Group by the assignee. Was custom_completed_by_employee, which is blank for
     # anything not yet Completed/Closed and so collapsed most rows into one group
     # as soon as the All status filter was used.
-    group_key = lambda d: d.get("custom_assign_to_employee") or _("No Employee")
+    group_key = lambda d: d.get("custom_assign_to_employee") or _("No Assignee")
     
-    for employee_name, rows in groupby(data, key=group_key):
+    for assignee_name, rows in groupby(data, key=group_key):
         rows_list = list(rows)
 
         # Calculate totals for this employee
@@ -324,7 +324,7 @@ def process_grouped_data(data):
 
         # Add parent row (summary)
         parent_row = {
-            "custom_assign_to_employee": employee_name,
+            "custom_assign_to_employee": assignee_name,
             "completed_by": "",
             "custom_completed_by_employee": "",
             "name": "",

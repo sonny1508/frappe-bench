@@ -10,13 +10,16 @@ Both Synology and Matrix hooks fire side-by-side using Python lists:
 doc_events = {
     "ToDo": {
         "after_insert": [
-            "gs_customizations.synology.synology.notify_todo_insert",
+            # Task field automation - see docs/erpnext/task/task-overrides.md
+            "gs_customizations.overrides.erpnext.task.task.set_exp_start_date_from_assignment",
+            "gs_customizations.overrides.erpnext.task.task.set_assignee_from_assignment",
+            # "gs_customizations.synology.synology.notify_todo_insert",
             "gs_customizations.matrix.notifications.notify_todo_insert"
         ]
     },
     "Task": {
         "on_update": [
-            "gs_customizations.synology.synology.notify_task_update",
+            # "gs_customizations.synology.synology.notify_task_update",
             "gs_customizations.matrix.notifications.notify_task_update"
         ],
     },
@@ -25,6 +28,11 @@ doc_events = {
     },
 }
 ```
+
+The Synology entries are already commented out — the section below is kept for
+reference. Note the ToDo `after_insert` list is now shared with Task field
+automation, and `notify_todo_insert` does an unguarded
+`frappe.get_doc("Task", ...)`, so it stays last in the list.
 
 ## How to disable Synology
 
