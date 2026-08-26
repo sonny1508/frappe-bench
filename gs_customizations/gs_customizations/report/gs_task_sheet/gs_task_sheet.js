@@ -84,7 +84,8 @@ frappe.query_reports["GS Task Sheet"] = {
             options: [
                 { value: "Both", label: __("Both Completed & Closed") },
                 { value: "Completed", label: __("Completed") },
-                { value: "Closed", label: __("Closed") }
+                { value: "Closed", label: __("Closed") },
+                { value: "All", label: __("All") }
             ],
             default: "Both"
         },
@@ -115,7 +116,7 @@ frappe.query_reports["GS Task Sheet"] = {
     
     // Enable tree view when grouping
     tree: true,
-    name_field: "custom_completed_by_employee",
+    name_field: "custom_assign_to_employee",
     parent_field: "parent_employee",
     initial_depth: 1,
     

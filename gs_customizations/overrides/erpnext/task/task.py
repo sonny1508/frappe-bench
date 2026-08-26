@@ -4,6 +4,7 @@ from frappe import _, throw
 from frappe.utils import now_datetime
 from frappe.utils import flt
 from frappe.utils import getdate
+from frappe.utils import get_fullname
 
 from frappe.desk.form.assign_to import clear, close_all_assignments
 from frappe.model.mapper import get_mapped_doc
@@ -396,8 +397,6 @@ def auto_set_fields_on_todo(doc):
 	)
 	todo = assignees[0] if assignees else None
 
-	from frappe.utils import get_fullname
-
 	if doc.status in ["Completed", "Closed"]:
 		# Credit the user who did the completing when they are one of the
 		# assignees, so multi-assignee tasks don't credit an arbitrary one.
@@ -647,3 +646,55 @@ def preserve_exp_start_date(doc):
 	stored = frappe.db.get_value("Task", doc.name, "exp_start_date")
 	if stored:
 		doc.exp_start_date = stored
+
+
+def set_assignee_from_assignment(doc, method=None):
+	"""Stamp Task.custom_assign_to_employee / custom_assign_to_id on assignment.
+
+	Hooked to: ToDo -> after_insert.
+
+	auto_set_fields_on_todo() already derives these two fields, but only when the
+	Task itself is saved - and assigning somebody does not save the Task, it only
+	inserts a ToDo. So a freshly created Open task sat with an empty
+	custom_assign_to_employee until someone happened to edit it for an unrelated
+	reason. GS Task Sheet now filters on that field, which made the gap visible as
+	silently missing rows.
+
+	Mirrors auto_set_fields_on_todo()'s rule that a Completed or Closed task keeps
+	the assignee it finished with rather than being re-stamped.
+
+	Assign direction only. Un-assigning still reconciles on the Task's next save,
+	exactly as before. Hooking ToDo.on_update to catch it would be actively
+	dangerous: close_all_assignments() runs inside CustomTask.validate_status()
+	while the Task's *stored* status is still the old one, so the guard below
+	would not have flipped yet and closing a task would wipe its assignee.
+
+	Never raises - this runs inside the assignment's transaction.
+	"""
+	try:
+		if doc.reference_type != "Task" or not doc.reference_name:
+			return
+
+		if doc.status != "Open" or not doc.allocated_to:
+			return
+
+		task_status = frappe.db.get_value("Task", doc.reference_name, "status")
+		if task_status is None or task_status in ("Completed", "Closed"):
+			return
+
+		frappe.db.set_value(
+			"Task",
+			doc.reference_name,
+			{
+				"custom_assign_to_employee": get_fullname(doc.allocated_to),
+				"custom_assign_to_id": doc.allocated_to,
+			},
+			update_modified=False,
+		)
+
+	except Exception:
+		frappe.log_error(
+			frappe.get_traceback(),
+			"gs_customizations: assignee stamp from assignment failed",
+			defer_insert=True,
+		)

@@ -39,7 +39,7 @@ def execute(filters=None):
         if getdate(filters.start_date) > getdate(filters.end_date):
             frappe.throw(_("Start date cannot be greater than end date."))
     
-    columns = get_columns(filters)
+    columns = get_columns()
     data = get_data(filters)
     
     if not data:
@@ -49,31 +49,14 @@ def execute(filters=None):
     return columns, data, None, None
 
 
-def get_columns(filters):
-    """Define report columns based on filters"""
-    columns = []
-    
-    # Add grouping column if group_by_employee is selected
-    if filters.get("group_by_employee"):
-        columns.append(
-            {
-                "fieldname": "completed_by",
-                "label": _("Completed By"),
-                "fieldtype": "Data",
-                "width": 150
-            }
-        ),
-        columns.append(
-            {
-                "fieldname": "custom_completed_by_employee",
-                "label": _("Completed By Employee"),
-                "fieldtype": "Data",
-                "width": 140
-            }
-        )
-    
-    # Add standard columns
-    columns.extend([
+def get_columns():
+    """Report columns.
+
+    Deliberately one fixed list. The column order used to change when
+    Group By Employee was ticked - the two completed-by columns jumped to the
+    front - which made the layout inconsistent between the two modes.
+    """
+    return [
         {
             "fieldname": "name",
             "label": _("ID"),
@@ -123,32 +106,26 @@ def get_columns(filters):
             "label": _("Expected Start Date"),
             "fieldtype": "Date",
             "width": 130
-        }
-    ])
-
-    # Don't duplicate the employee column if we're grouping
-    if not filters.get("group_by_employee"):
-        columns.append(
-            {
-                "fieldname": "completed_by",
-                "label": _("Completed By"),
-                "fieldtype": "Link",
-                "options": "User",
-                "width": 150
-            }
-        ),
-        columns.append(
-            {
-                "fieldname": "custom_completed_by_employee",
-                "label": _("Completed By Employee"),
-                "fieldtype": "Data",
-                "width": 140
-            }
-        )
-
-    
-    # Add time columns
-    columns.extend([
+        },
+        {
+            "fieldname": "custom_assign_to_employee",
+            "label": _("Assigned To"),
+            "fieldtype": "Data",
+            "width": 150
+        },
+        {
+            "fieldname": "completed_by",
+            "label": _("Completed By"),
+            "fieldtype": "Link",
+            "options": "User",
+            "width": 150
+        },
+        {
+            "fieldname": "custom_completed_by_employee",
+            "label": _("Completed By Employee"),
+            "fieldtype": "Data",
+            "width": 140
+        },
         {
             "fieldname": "completed_on",
             "label": _("Completed On"),
@@ -191,19 +168,17 @@ def get_columns(filters):
             "fieldtype": "Data",
             "width": 160
         }
-    ])
-    
-    return columns
+    ]
 
 
 def get_data(filters):
     """Fetch and return report data"""
     conditions = get_conditions(filters)
     
-    # Determine order by clause
-    order_by = "completed_by DESC, name DESC"
-    if filters.get("group_by_employee"):
-        order_by = "completed_by, name DESC"
+    # Grouping uses itertools.groupby, which only works on input already sorted
+    # by the group key - so the assignee has to lead the ORDER BY. Kept the same
+    # in both modes so the flat and grouped views agree on row order.
+    order_by = "custom_assign_to_employee, name DESC"
     
     data = frappe.db.sql(f"""
         SELECT 
@@ -217,6 +192,7 @@ def get_data(filters):
             type,
             is_group,
             exp_start_date,
+            custom_assign_to_employee,
             completed_by,
             custom_completed_by_employee,
             completed_on,
@@ -267,20 +243,35 @@ def get_conditions(filters):
         if filters.end_date:
             conditions += f" AND {date_field} <= %(end_date)s"
     
-    # Status filter - handle "Closed" vs "Completed"
+    # Status filter. "All" is written as an exclusion rather than a list of every
+    # status: an inclusion list silently drops any status added to Task later,
+    # which is the one failure mode nobody notices.
     if filters.get("status"):
-        if filters.status == "Completed":
-            conditions += " AND status = 'Completed'"
-        elif filters.status == "Closed":
-            conditions += " AND status = 'Closed'"
+        if filters.status in ("Completed", "Closed"):
+            conditions += " AND status = %(status)s"
         elif filters.status == "Both":
-            conditions += "And status IN ('Completed', 'Closed')"
+            conditions += " AND status IN ('Completed', 'Closed')"
+        elif filters.status == "All":
+            conditions += " AND status NOT IN ('Cancelled', 'Template')"
+
+    # Only tasks that carry an assignee. Needed for the "All" status option:
+    # completed_by / custom_completed_by_employee are only populated once a task
+    # reaches Completed or Closed, so they cannot identify the employee on an
+    # open task - custom_assign_to_employee can.
+    conditions += " AND IFNULL(custom_assign_to_employee, '') != ''"
 
     # Non-managers can only see their own records. Raw SQL bypasses
     # permission_query_conditions, so the lock must be re-applied here.
     # completed_by holds the Employee ID (set in task.py auto_set_fields_on_todo),
     # so match on the session user's Employee; keep the user email as a
     # fallback for rows where core ERPNext stored the User instead.
+    #
+    # The assignee arm is required by the "All" status option: completed_by is
+    # only filled once a task reaches Completed/Closed, so on its own it hides
+    # every open task a non-manager owns - they would see an empty report.
+    # custom_assign_to_id holds the User email, not the Employee ID.
+    # No widening of access: task_permissions.task_query_conditions already
+    # scopes Task visibility to the user's own assignments.
     if not is_manager():
         own_ids = [frappe.session.user]
         employee = frappe.db.get_value(
@@ -289,7 +280,11 @@ def get_conditions(filters):
         if employee:
             own_ids.append(employee)
         filters.own_ids = own_ids
-        conditions += " AND completed_by IN %(own_ids)s"
+        filters.own_user = frappe.session.user
+        conditions += (
+            " AND (completed_by IN %(own_ids)s"
+            " OR custom_assign_to_id = %(own_user)s)"
+        )
 
     return conditions
 
@@ -312,8 +307,10 @@ def process_grouped_data(data):
     
     result = []
     
-    # Group by employee
-    group_key = lambda d: d.get("custom_completed_by_employee") or _("No Employee")
+    # Group by the assignee. Was custom_completed_by_employee, which is blank for
+    # anything not yet Completed/Closed and so collapsed most rows into one group
+    # as soon as the All status filter was used.
+    group_key = lambda d: d.get("custom_assign_to_employee") or _("No Employee")
     
     for employee_name, rows in groupby(data, key=group_key):
         rows_list = list(rows)
@@ -325,12 +322,11 @@ def process_grouped_data(data):
         total_actual_days = total_actual / 8
         total_utilization = calculate_utilization(total_actual, total_expected)
 
-        completed_by = rows_list[0].get("completed_by") if rows_list else ""
-        
         # Add parent row (summary)
         parent_row = {
-            "completed_by": completed_by,
-            "custom_completed_by_employee": employee_name,
+            "custom_assign_to_employee": employee_name,
+            "completed_by": "",
+            "custom_completed_by_employee": "",
             "name": "",
             "subject": "",
             "project": "",

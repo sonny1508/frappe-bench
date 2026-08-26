@@ -231,6 +231,9 @@ doc_events = {
             # notify_todo_insert below does an unguarded get_doc("Task", ...) and
             # would abort the rest of the chain if the Task were missing.
             "gs_customizations.overrides.erpnext.task.task.set_exp_start_date_from_assignment",
+            # Assigning inserts a ToDo, it does not save the Task - so the assignee
+            # fields would otherwise stay empty until the Task happened to be edited.
+            "gs_customizations.overrides.erpnext.task.task.set_assignee_from_assignment",
             # "gs_customizations.synology.synology.notify_todo_insert",
             "gs_customizations.matrix.notifications.notify_todo_insert"
         ]
