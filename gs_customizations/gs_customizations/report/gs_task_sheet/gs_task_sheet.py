@@ -332,7 +332,7 @@ def process_grouped_data(data):
         parent_row = {
             "custom_assign_to_employee": assignee_name,
             "completed_by": "",
-            "custom_completed_by_employee": "",
+            "custom_completed_by_employee": assignee_name,
             "name": "",
             "subject": "",
             "project": "",
