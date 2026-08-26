@@ -87,7 +87,29 @@ frappe.query_reports["GS Task Sheet"] = {
                 { value: "Closed", label: __("Closed") },
                 { value: "All", label: __("All") }
             ],
-            default: "Both"
+            default: "Both",
+            on_change: (report) => {
+                // Unfinished tasks have no completed_on, so leaving the date range
+                // pointed at it would filter out almost everything "All" exists to
+                // show (135 unfinished tasks become 8). Switch the date field over.
+                if (frappe.query_report.get_filter_value("status") === "All"
+                    && frappe.query_report.get_filter_value("date_field") !== "exp_start_date") {
+
+                    frappe.show_alert({
+                        message: __("Date filter switched to Expected Start Date, so unfinished tasks are included."),
+                        indicator: "blue"
+                    }, 7);
+
+                    // set_filter_value fires the date_field change, which refreshes
+                    // for us - calling report.refresh() too would double-fetch.
+                    frappe.query_report.set_filter_value("date_field", "exp_start_date");
+                    return;
+                }
+
+                // Defining on_change replaces the default refresh (query_report.js),
+                // so it has to be called by hand.
+                report.refresh();
+            }
         },
         {
             fieldname: "group_by_employee",
@@ -96,6 +118,17 @@ frappe.query_reports["GS Task Sheet"] = {
             default: 0,
             on_change: (report) => {
                 report.refresh();
+            }
+        },
+        {
+            fieldname: "show_mds",
+            label: __("Show MDs"),
+            fieldtype: "Check",
+            default: 0,
+            on_change: () => {
+                // Purely a display toggle - no server round-trip needed, and
+                // deliberately no report.refresh() so it applies instantly.
+                apply_md_column_visibility(frappe.query_report.datatable);
             }
         }
     ],
@@ -114,6 +147,12 @@ frappe.query_reports["GS Task Sheet"] = {
         }
     },
     
+    after_datatable_render: function(datatable) {
+        // Runs on both the create and the refresh path, unlike
+        // get_datatable_options which only fires when the datatable is first built.
+        apply_md_column_visibility(datatable);
+    },
+
     // Enable tree view when grouping
     tree: true,
     name_field: "custom_assign_to_employee",
@@ -145,6 +184,41 @@ frappe.query_reports["GS Task Sheet"] = {
         return value;
     }
 };
+
+// The two "In Days" columns are derived (hours / 8) and mostly just cost
+// horizontal scroll, so they are hidden unless "Show MDs" is ticked.
+//
+// Hiding happens in the DOM rather than by dropping the columns in get_columns():
+// the Excel export re-runs the report server-side and never looks at the page, so
+// the export keeps all its columns whatever this toggle is set to.
+const MD_COLUMNS = ["expected_time_days", "actual_time_days"];
+const MD_STYLE_ID = "gs-task-sheet-md-style";
+const MD_SCOPE_CLASS = "gs-task-sheet";
+
+function apply_md_column_visibility(datatable) {
+    const existing = document.getElementById(MD_STYLE_ID);
+    if (existing) existing.remove();
+
+    if (!datatable || !datatable.wrapper || !datatable.datamanager) return;
+
+    // Every datatable in the desk uses .dt-cell--col-N, so the rules are scoped to
+    // this report's own wrapper. An unscoped rule would keep hiding whatever
+    // happened to be columns 14 and 15 on the next report the user opens.
+    datatable.wrapper.classList.add(MD_SCOPE_CLASS);
+
+    if (frappe.query_report.get_filter_value("show_mds")) return;
+
+    const selectors = (datatable.datamanager.getColumns() || [])
+        .filter((col) => MD_COLUMNS.includes(col.fieldname || col.id))
+        .map((col) => `.${MD_SCOPE_CLASS} .dt-cell--col-${col.colIndex}`);
+
+    if (!selectors.length) return;
+
+    const style = document.createElement("style");
+    style.id = MD_STYLE_ID;
+    style.textContent = `${selectors.join(", ")} { display: none !important; }`;
+    document.head.appendChild(style);
+}
 
 function set_reqd_filter(fieldname, required) {
     let filter = frappe.query_report.get_filter(fieldname);
