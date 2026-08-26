@@ -90,9 +90,23 @@ Implementation notes for anyone touching it:
   datatable in the desk; an unscoped rule would follow the user to the next report.
 - The toggle deliberately does **not** refresh the report — it is display only.
 
-The same scoping trick sizes the filter inputs (`size_filters_to_content`). Query
-report filters render as bare inputs with no width of their own and fall back to
-roughly 180px each, which overflows the row and orphans the last checkbox.
+## Filter bar layout
+
+`.page-form` is a wrapping flexbox, so with eight filters the last checkbox
+overflowed and sat alone on the second line. `move_toggles_to_own_row` inserts a
+zero-height, full-width spacer before the first checkbox, so both toggles move down
+together. CSS alone cannot do this — there is no way to force a wrap *before* a given
+flex item.
+
+Sizing the filters to fit instead was tried and reverted. `.page-form` is created as
+`<div class="page-form row hide">` — it carries Bootstrap's `.row`, and fixed pixel
+widths on the controls fight its column sizing.
+
+Related: the **year** filter's options are built in `onload`, *after* `setup_filters()`
+has already applied the default. A `<select>` given a value with no matching `<option>`
+silently keeps `""`, which is what produced a spurious "Please select month and year".
+`onload` now re-applies the value once the options exist, and `execute()` falls back to
+the current month/year rather than throwing.
 
 ## Grouping
 

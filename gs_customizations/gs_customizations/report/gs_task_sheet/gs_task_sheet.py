@@ -30,8 +30,14 @@ def execute(filters=None):
     if not filters.filter_based_on:
         frappe.throw(_("Please select Filter Based On"))
     
-    if filters.filter_based_on == "Month" and not (filters.month and filters.year):
-        frappe.throw(_("Please select month and year."))
+    # Month/Year always have a sensible value, so there is nothing to nag about.
+    # Falling back here rather than throwing also stops an empty year from turning
+    # into an unbounded query - get_conditions() skips the date clause entirely
+    # when either is missing.
+    if filters.filter_based_on == "Month":
+        today = getdate()
+        filters.month = cint(filters.month) or today.month
+        filters.year = cint(filters.year) or today.year
     
     if filters.filter_based_on == "Date Range":
         if not (filters.start_date and filters.end_date):

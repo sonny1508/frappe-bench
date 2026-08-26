@@ -134,8 +134,6 @@ frappe.query_reports["GS Task Sheet"] = {
     ],
     
     onload: function(report) {
-        size_filters_to_content(report);
-
         // Populate year options
         let year_filter = report.filters.find(f => f.df.fieldname === "year");
         if (year_filter) {
@@ -146,7 +144,16 @@ frappe.query_reports["GS Task Sheet"] = {
             }
             year_filter.df.options = years;
             year_filter.refresh();
+
+            // setup_filters() applied the default before these options existed, and a
+            // <select> given a value with no matching <option> silently keeps "" -
+            // which is what produced the "Please select month and year" error.
+            if (!year_filter.get_value()) {
+                year_filter.set_value(current_year);
+            }
         }
+
+        move_toggles_to_own_row(report);
     },
     
     after_datatable_render: function(datatable) {
@@ -187,44 +194,33 @@ frappe.query_reports["GS Task Sheet"] = {
     }
 };
 
-// Query report filters render as bare inputs (page.js add_field passes
-// only_input, so the label becomes the placeholder) and carry no width of their
-// own - they fall back to an input's intrinsic ~180px each. With eight filters
-// that overflows the row and orphans the last checkbox on a line by itself.
+// Drop the two checkbox toggles onto a row of their own.
 //
-// So each one is sized to what it actually holds. Scoped to this report's page
-// wrapper: .page-form is every report's filter bar, and an unscoped rule would
-// resize filters on every report in the desk.
-const FILTER_WIDTHS = {
-    filter_based_on: 150,
-    date_field: 165,
-    month: 90,
-    year: 90,
-    start_date: 120,
-    end_date: 120,
-    status: 185,
-};
-const FILTER_STYLE_ID = "gs-task-sheet-filter-style";
-const PAGE_SCOPE_CLASS = "gs-task-sheet-page";
+// .page-form is a wrapping flexbox, so with eight filters the last checkbox
+// overflowed and sat alone on the second line. CSS cannot force a wrap before a
+// given flex item, so a zero-height full-width spacer is inserted ahead of the
+// first toggle - everything from there on moves down together.
+//
+// Sizing the filters instead was tried and reverted: .page-form is created as
+// `<div class="page-form row">`, so it also carries Bootstrap's .row, and fixed
+// pixel widths on the controls fight its column sizing.
+function move_toggles_to_own_row(report) {
+    if (!report || !report.page || !report.page.page_form) return;
 
-function size_filters_to_content(report) {
-    if (!report || !report.page || !report.page.wrapper) return;
-
-    report.page.wrapper.addClass(PAGE_SCOPE_CLASS);
-
-    if (document.getElementById(FILTER_STYLE_ID)) return;
+    const page_form = report.page.page_form;
+    if (page_form.find(".gs-filter-row-break").length) return;
 
     // data-fieldname sits on the control wrapper for some fieldtypes and on the
-    // input itself for others, so the selector deliberately matches either.
-    const rules = Object.keys(FILTER_WIDTHS).map((fieldname) =>
-        `.${PAGE_SCOPE_CLASS} .page-form [data-fieldname="${fieldname}"]` +
-        ` { width: ${FILTER_WIDTHS[fieldname]}px; min-width: 0; }`
-    );
+    // input for others; closest() matches either, since it includes self.
+    const first_toggle = page_form
+        .find('[data-fieldname="group_by_assignee"]')
+        .closest(".checkbox, .form-group");
 
-    const style = document.createElement("style");
-    style.id = FILTER_STYLE_ID;
-    style.textContent = rules.join("\n");
-    document.head.appendChild(style);
+    if (!first_toggle.length) return;
+
+    $('<div class="gs-filter-row-break"></div>')
+        .css({ "flex": "0 0 100%", "height": 0 })
+        .insertBefore(first_toggle);
 }
 
 // The two "In Days" columns are derived (hours / 8) and mostly just cost
