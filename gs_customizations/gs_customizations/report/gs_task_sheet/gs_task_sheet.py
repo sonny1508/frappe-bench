@@ -64,6 +64,19 @@ def get_columns():
     """
     return [
         {
+            "fieldname": "completed_by",
+            "label": _("Completed By"),
+            "fieldtype": "Link",
+            "options": "User",
+            "width": 150
+        },
+        {
+            "fieldname": "custom_completed_by_employee",
+            "label": _("Completed By Employee"),
+            "fieldtype": "Data",
+            "width": 140
+        },
+        {
             "fieldname": "custom_assign_to_employee",
             "label": _("Assigned To"),
             "fieldtype": "Data",
@@ -118,19 +131,6 @@ def get_columns():
             "label": _("Expected Start Date"),
             "fieldtype": "Date",
             "width": 130
-        },
-        {
-            "fieldname": "completed_by",
-            "label": _("Completed By"),
-            "fieldtype": "Link",
-            "options": "User",
-            "width": 150
-        },
-        {
-            "fieldname": "custom_completed_by_employee",
-            "label": _("Completed By Employee"),
-            "fieldtype": "Data",
-            "width": 140
         },
         {
             "fieldname": "completed_on",
