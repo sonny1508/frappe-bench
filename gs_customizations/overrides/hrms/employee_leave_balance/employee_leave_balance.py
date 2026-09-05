@@ -13,8 +13,8 @@ from hrms.hr.report.employee_leave_balance.employee_leave_balance import (
 	get_leave_types,
 	get_employees,
 	get_allocated_and_expired_leaves,
-	get_opening_balance,
 )
+from hrms.hr.doctype.leave_allocation.leave_allocation import get_previous_allocation
 
 from gs_customizations.overrides.hrms.leave_application.leave_application import (
 	get_leave_balance_on,
@@ -30,6 +30,7 @@ def apply_employee_leave_balance_overrides():
 	employee_leave_balance.get_allocated_leaves = get_allocated_leaves
 	employee_leave_balance.get_expired_leaves = get_expired_leaves
 	employee_leave_balance.get_cf_leaves = get_cf_leaves
+	employee_leave_balance.get_opening_balance = get_opening_balance
 	employee_leave_balance.get_dataset_for_chart = get_dataset_for_chart
 
 def get_columns():
@@ -88,6 +89,14 @@ def get_columns():
 			"width": 150,
 		},
 		{
+			"label": _("Leave(s) Written Off"),
+			"fieldtype": "Duration",
+			"fieldname": "leaves_written_off",
+			"hide_days": 1,
+			"hide_seconds": 1,
+			"width": 170,
+		},
+		{
 			"label": _("Closing Balance"),
 			"fieldtype": "Duration",
 			"fieldname": "closing_balance",
@@ -132,17 +141,59 @@ def get_data(filters: Filters) -> list:
 			)
 			opening = get_opening_balance(employee.name, leave_type, filters, carry_forwarded_leaves)
 
+			# get_expired_leaves returns a SIGNED figure: positive where the ledger took hours
+			# away (a real expiry), negative where it handed hours back. Both come out of the
+			# same is_expired rows, because the mid-year reset zeroes every balance at the
+			# cutoff - which removes hours from anyone in credit and returns hours to anyone
+			# overdrawn. Split them by sign so neither column can show a negative, and so
+			# "Expired" stays a true hours-lost figure.
 			row.leaves_allocated = flt(new_allocation, precision)
-			row.leaves_expired = flt(expired_leaves, precision)
+			row.leaves_expired = flt(max(expired_leaves, 0), precision)
+			row.leaves_written_off = flt(max(-expired_leaves, 0), precision)
 			row.opening_balance = flt(opening, precision)
 			row.leaves_taken = flt(leaves_taken, precision)
 
-			closing = new_allocation + opening - (row.leaves_expired + leaves_taken)
+			# algebraically identical to the old
+			#   new_allocation + opening - (signed_expired + taken)
+			closing = (
+				new_allocation + opening + row.leaves_written_off
+				- (row.leaves_expired + leaves_taken)
+			)
 			row.closing_balance = flt(closing, precision)
 			row.indent = 1
 			data.append(row)
 
 	return data
+
+
+def get_opening_balance(employee, leave_type, filters, carry_forwarded_leaves):
+	"""Balance carried into the report window.
+
+	Overridden for two reasons. The stock version falls through to the stock
+	get_leave_balance_on, which reads the days-based `leaves` column - zero throughout this
+	seconds-based system - and it only treats carry-forward as the opening balance when a
+	previous allocation ended exactly one day before the window starts.
+	"""
+	opening_balance_date = add_days(filters.from_date, -1)
+	allocation = get_previous_allocation(filters.from_date, leave_type, employee)
+
+	if (
+		allocation
+		and allocation.get("to_date")
+		and getdate(allocation.get("to_date")) == getdate(opening_balance_date)
+	):
+		# previous allocation ended the day before, so what carried over IS the opening balance
+		return flt(carry_forwarded_leaves)
+
+	if carry_forwarded_leaves:
+		# Carry-forward with no previous allocation closing on the boundary - e.g. an
+		# allocation created with unused hours from a period that predates this system.
+		# Upstream falls through to the balance lookup, finds no ledger rows on that date and
+		# returns 0, silently dropping those hours: get_allocated_leaves excludes is_carry_forward
+		# rows, so the opening balance is the only way they can reach the closing balance.
+		return flt(carry_forwarded_leaves)
+
+	return flt(get_leave_balance_on(employee, leave_type, opening_balance_date))
 
 
 def get_allocated_leaves(from_date, to_date, employee, leave_type):
@@ -164,10 +215,10 @@ def get_allocated_leaves(from_date, to_date, employee, leave_type):
 
 def get_expired_leaves(from_date, to_date, employee, leave_type):
 	ledger = frappe.qb.DocType("Leave Ledger Entry")
-	# Signed (not Abs): normal expiries store a negative amount, so -Sum shows them as a
-	# positive "expired" figure exactly like before. A *positive* is_expired entry (used to
-	# clear a negative/owed balance at reset) therefore shows as a negative expired figure,
-	# and the closing formula (allocated + opening - (expired + taken)) stays correct for both.
+	# Signed (not Abs): normal expiries store a negative amount, so -Sum reports them as a
+	# positive "hours lost" figure. A *positive* is_expired entry (the reset handing hours back
+	# to an overdrawn employee) therefore comes out negative here. get_data splits the result
+	# by sign into the Expired and Written Off columns; keep this signed so it can.
 	expired_leaves = (
 		frappe.qb.from_(ledger)
 		.select(Sum(ledger.custom_time_leaves) * -1)

@@ -614,11 +614,21 @@ def get_leave_details(employee, date, for_salary_slip=False):
 
 		leaves_taken = get_leaves_for_period(employee, d, allocation.from_date, to_date) * -1
 		leaves_pending = get_leaves_pending_approval_for_period(employee, d, allocation.from_date, to_date)
+
+		# Signed: positive where the ledger took hours away (a real expiry), negative where it
+		# handed hours back - the mid-year reset zeroes every balance at the cutoff, so it
+		# removes hours from anyone in credit and returns hours to anyone overdrawn, and both
+		# land in is_expired rows. Split by sign rather than clamping the negative to 0, which
+		# hid the credit entirely and left the card not adding up (allocated 91h, taken 99h,
+		# expired 0h, yet 4h available). Mirrors the Employee Leave Balance report column for
+		# column.
 		expired_leaves = allocation.total_leaves_allocated - (remaining_leaves + leaves_taken)
+		written_off = -expired_leaves if expired_leaves < 0 else 0
 
 		leave_allocation[d] = {
 			"total_leaves": format_duration(flt(allocation.total_leaves_allocated), hide_days=True),
 			"expired_leaves": format_duration(flt(expired_leaves), hide_days=True) if expired_leaves > 0 else 0,
+			"written_off": format_duration(flt(written_off), hide_days=True) if written_off > 0 else 0,
 			"leaves_taken": format_duration(flt(leaves_taken), hide_days=True),
 			"leaves_pending_approval": format_duration(flt(leaves_pending), hide_days=True),
 			"remaining_leaves": format_duration(flt(remaining_leaves), hide_days=True),

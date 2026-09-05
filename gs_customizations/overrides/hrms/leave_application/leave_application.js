@@ -31,9 +31,7 @@ frappe.ui.form.on("Leave Application", {
 			$("div").remove(".form-dashboard-section.custom");
 
 			frm.dashboard.add_section(
-				frappe.render_template("leave_application_dashboard", {
-					data: leave_details,
-				}),
+				render_leave_balance_table(leave_details),
 				__("Allocated Leaves"),
 			);
 			frm.dashboard.show();
@@ -342,4 +340,44 @@ function apply_field_permission(frm) {
 	});
 	
 	frm.refresh_fields();
+}
+
+// Replaces the stock `leave_application_dashboard` template, which has no Written Off column.
+// The mid-year reset zeroes each balance at the cutoff, so it takes hours off anyone in credit
+// (Expired) and hands hours back to anyone overdrawn (Written Off). Both are is_expired ledger
+// rows and the stock card showed only the first, clamping the second to 0 -- which left the row
+// not adding up: allocated 91h, used 99h, expired 0h, yet 4h available.
+function render_leave_balance_table(data) {
+	if (!data || $.isEmptyObject(data)) {
+		return `<p style="margin-top: 30px;">${__("No leaves have been allocated.")}</p>`;
+	}
+
+	const columns = [
+		["total_leaves", __("Total Allocated Leaves")],
+		["expired_leaves", __("Expired Leaves")],
+		["written_off", __("Written Off")],
+		["leaves_taken", __("Used Leaves")],
+		["leaves_pending_approval", __("Leaves Pending Approval")],
+	];
+
+	let html = '<table class="table table-bordered small"><thead><tr>';
+	html += `<th style="width: 16%">${__("Leave Type")}</th>`;
+	columns.forEach(([, label]) => {
+		html += `<th style="width: 14%" class="text-right">${label}</th>`;
+	});
+	html += `<th style="width: 14%" class="text-right">${__("Available Leaves")}</th>`;
+	html += "</tr></thead><tbody>";
+
+	for (const [leave_type, value] of Object.entries(data)) {
+		const color = cint(value["remaining_leaves"]) > 0 ? "green" : "red";
+		html += "<tr>";
+		html += `<td>${frappe.utils.escape_html(leave_type)}</td>`;
+		columns.forEach(([field]) => {
+			html += `<td class="text-right">${value[field] || 0}</td>`;
+		});
+		html += `<td class="text-right" style="color: ${color}">${value["remaining_leaves"] || 0}</td>`;
+		html += "</tr>";
+	}
+
+	return html + "</tbody></table>";
 }
