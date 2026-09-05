@@ -616,19 +616,25 @@ def get_leave_details(employee, date, for_salary_slip=False):
 		leaves_pending = get_leaves_pending_approval_for_period(employee, d, allocation.from_date, to_date)
 
 		# Signed: positive where the ledger took hours away (a real expiry), negative where it
-		# handed hours back - the mid-year reset zeroes every balance at the cutoff, so it
-		# removes hours from anyone in credit and returns hours to anyone overdrawn, and both
-		# land in is_expired rows. Split by sign rather than clamping the negative to 0, which
-		# hid the credit entirely and left the card not adding up (allocated 91h, taken 99h,
-		# expired 0h, yet 4h available). Mirrors the Employee Leave Balance report column for
-		# column.
+		# handed hours back. Both come from is_expired rows, because the mid-year reset zeroes
+		# every balance at the cutoff - removing hours from anyone in credit, returning hours
+		# to anyone overdrawn.
+		#
+		# There is no such thing as a negative expiry to show. But a written-off overdraft is,
+		# from the balance's point of view, simply more hours made available - so fold it into
+		# the allocated total instead. That keeps the card reconciling on screen
+		# (allocated - expired - used = available) without inventing a column, and it needs no
+		# explaining: it reads as allocation because that is what it behaves like. Clamping the
+		# negative to 0 was what left the card not adding up - 83h allocated, 77h used, yet 18h
+		# available. Presentational only; remaining_leaves is computed from the ledger and is
+		# untouched. Once the 2026 reset rows age out, written_off is always 0 and this reduces
+		# to the plain figures, so there is no dead concept left behind.
 		expired_leaves = allocation.total_leaves_allocated - (remaining_leaves + leaves_taken)
-		written_off = -expired_leaves if expired_leaves < 0 else 0
+		written_off = max(-expired_leaves, 0)
 
 		leave_allocation[d] = {
-			"total_leaves": format_duration(flt(allocation.total_leaves_allocated), hide_days=True),
+			"total_leaves": format_duration(flt(allocation.total_leaves_allocated + written_off), hide_days=True),
 			"expired_leaves": format_duration(flt(expired_leaves), hide_days=True) if expired_leaves > 0 else 0,
-			"written_off": format_duration(flt(written_off), hide_days=True) if written_off > 0 else 0,
 			"leaves_taken": format_duration(flt(leaves_taken), hide_days=True),
 			"leaves_pending_approval": format_duration(flt(leaves_pending), hide_days=True),
 			"remaining_leaves": format_duration(flt(remaining_leaves), hide_days=True),

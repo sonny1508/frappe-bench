@@ -89,14 +89,6 @@ def get_columns():
 			"width": 150,
 		},
 		{
-			"label": _("Leave(s) Written Off"),
-			"fieldtype": "Duration",
-			"fieldname": "leaves_written_off",
-			"hide_days": 1,
-			"hide_seconds": 1,
-			"width": 170,
-		},
-		{
 			"label": _("Closing Balance"),
 			"fieldtype": "Duration",
 			"fieldname": "closing_balance",
@@ -141,24 +133,19 @@ def get_data(filters: Filters) -> list:
 			)
 			opening = get_opening_balance(employee.name, leave_type, filters, carry_forwarded_leaves)
 
-			# get_expired_leaves returns a SIGNED figure: positive where the ledger took hours
-			# away (a real expiry), negative where it handed hours back. Both come out of the
-			# same is_expired rows, because the mid-year reset zeroes every balance at the
-			# cutoff - which removes hours from anyone in credit and returns hours to anyone
-			# overdrawn. Split them by sign so neither column can show a negative, and so
-			# "Expired" stays a true hours-lost figure.
-			row.leaves_allocated = flt(new_allocation, precision)
+			# get_expired_leaves is SIGNED: positive where the ledger took hours away (a real
+			# expiry), negative where the mid-year reset handed hours back to someone overdrawn.
+			# A written-off overdraft is more hours made available, so report it as allocation -
+			# see get_leave_details for the reasoning. No column can then show a negative, and
+			# the row reconciles on screen as
+			#   opening + allocated - taken - expired = closing
+			written_off = max(-expired_leaves, 0)
+			row.leaves_allocated = flt(new_allocation + written_off, precision)
 			row.leaves_expired = flt(max(expired_leaves, 0), precision)
-			row.leaves_written_off = flt(max(-expired_leaves, 0), precision)
 			row.opening_balance = flt(opening, precision)
 			row.leaves_taken = flt(leaves_taken, precision)
 
-			# algebraically identical to the old
-			#   new_allocation + opening - (signed_expired + taken)
-			closing = (
-				new_allocation + opening + row.leaves_written_off
-				- (row.leaves_expired + leaves_taken)
-			)
+			closing = new_allocation + opening - (expired_leaves + leaves_taken)
 			row.closing_balance = flt(closing, precision)
 			row.indent = 1
 			data.append(row)
