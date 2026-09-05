@@ -839,8 +839,13 @@ def get_manually_expired_leaves(
 
 	leaves = (
 		frappe.qb.from_(ledger)
-		# leaves -> custom_time_leaves
-		.select(ledger.custom_time_leaves)
+		# leaves -> custom_time_leaves, and Sum() instead of the bare column. Upstream selects
+		# the column unaggregated and then reads row 0 only, which is fine there because the
+		# stock Expire Allocation flow writes at most one is_expired entry per allocation. The
+		# mid-year PTO reset adds a second one (-X @ 30/06) on top of the allocation's own
+		# expiry, so an unaggregated select silently drops all but the first row and the
+		# dashboard under-reports Expired Leaves / over-reports Available Leaves.
+		.select(Sum(ledger.custom_time_leaves))
 		.where(
 			(ledger.docstatus == 1)
 			& (ledger.employee == employee)
@@ -851,7 +856,8 @@ def get_manually_expired_leaves(
 			& ((ledger.is_expired == 1) & (ledger.is_carry_forward == 0))
 		)
 	).run()
-	return leaves[0][0] if leaves else 0.0
+	# Sum() over zero rows returns a single (None,) row, not an empty result set
+	return flt(leaves[0][0]) if leaves else 0.0
 
 
 # override so that is uses the custom get_leaves_for_period

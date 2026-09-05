@@ -3,7 +3,7 @@
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, date_diff, flt, formatdate, get_link_to_form, getdate
+from frappe.utils import add_days, date_diff, flt, format_duration, formatdate, get_link_to_form, getdate
 
 from hrms.hr.doctype.leave_allocation.leave_allocation import (
 	LeaveAllocation,
@@ -71,6 +71,14 @@ class CustomLeaveAllocation(LeaveAllocation):
 				"company": self.company,
 				"leave_type": self.leave_type,
 				"is_carry_forward": 0,
+				# Expiry entries are withdrawals, not grants. This count answers "how much has
+				# this allocation granted so far" - it gates the annual_allocation cap in the
+				# earned-leave scheduler and the top-up delta in on_update_after_submit. The
+				# mid-year PTO reset writes is_expired rows against the live allocation, so
+				# leaving them in makes a positive reset row push the count over the annual cap
+				# (scheduler silently stops granting the monthly 8h) and a negative one hide
+				# leave already granted (cap never reached). Upstream omits this filter too.
+				"is_expired": 0,
 				"docstatus": 1,
 			},
 			# leaves -> custom_time_leaves
@@ -259,32 +267,45 @@ class CustomLeaveAllocation(LeaveAllocation):
 				title=_("Invalid Dates"),
 			)
 
-		new_leaves_days = self.seconds_to_days(new_leaves)
-		current_total_days = self.seconds_to_days(self.custom_total_time_leaves_allocated)
-		existing_leaves = self.get_existing_leave_count()
-		
-		new_allocation_days = flt(current_total_days) + flt(new_leaves_days)
-		new_allocation_without_cf = flt(existing_leaves) + flt(new_leaves_days)
+		# Everything below stays in SECONDS. The earlier version mixed units: it compared
+		# get_existing_leave_count() (seconds) against new_leaves converted to days, and
+		# max_leaves_allowed (seconds) against a day figure. Two consequences - the
+		# max_leaves_allowed cap never fired at all, and once an allocation's granted total
+		# passed annual_allocation the gate rejected EVERY later call, including the negative
+		# one needed to correct it (a few days either way is noise against a seconds total),
+		# leaving the button locked against its own mistake. Staying in seconds also drops the
+		# seconds -> days -> int(seconds) round trip, whose truncation shaved a second or two
+		# off the stored counter each time.
+		new_leaves = flt(new_leaves)
+		current_total = flt(self.custom_total_time_leaves_allocated)
+		existing_leaves = flt(self.get_existing_leave_count())
 
-		max_leaves_allowed = frappe.db.get_value("Leave Type", self.leave_type, "max_leaves_allowed")
-		if new_allocation_days > max_leaves_allowed and max_leaves_allowed > 0:
-			new_allocation_days = max_leaves_allowed
+		new_allocation = current_total + new_leaves
+		new_allocation_without_cf = existing_leaves + new_leaves
 
-		annual_allocation = frappe.db.get_value(
+		max_leaves_allowed = flt(frappe.db.get_value("Leave Type", self.leave_type, "max_leaves_allowed"))
+		if max_leaves_allowed > 0 and new_allocation > max_leaves_allowed:
+			new_allocation = max_leaves_allowed
+
+		# Ad-hoc allocations (e.g. Special Time Off) carry no Leave Policy, so there is no
+		# annual figure to cap against and only max_leaves_allowed applies. The lookup used to
+		# return None -> 0.0, which rejected every allocation made on such a record.
+		annual_allocation = flt(frappe.db.get_value(
 			"Leave Policy Detail",
 			{"parent": self.leave_policy, "leave_type": self.leave_type},
 			"annual_allocation",
-		)
-		annual_allocation = flt(annual_allocation, 2)
+		)) if self.leave_policy else 0.0
 
-		if new_allocation_days != current_total_days and new_allocation_without_cf <= annual_allocation:
-			new_total_seconds = self.days_to_seconds(new_allocation_days)
-			self.db_set("custom_total_time_leaves_allocated", new_total_seconds, update_modified=False)
+		within_annual = not annual_allocation or new_allocation_without_cf <= annual_allocation
+
+		if new_allocation != current_total and within_annual:
+			self.db_set("custom_total_time_leaves_allocated", new_allocation, update_modified=False)
 
 			date = from_date or frappe.flags.current_date or getdate()
 			create_additional_leave_ledger_entry(self, new_leaves, date)
 
-			hours = flt(new_leaves) / 3600
+			hours = new_leaves / 3600
+			new_leaves_days = self.seconds_to_days(new_leaves)
 			text = _("{0} hours ({1} days) were manually allocated by {2} on {3}").format(
 				frappe.bold(f"{hours:.2f}"),
 				frappe.bold(f"{new_leaves_days:.2f}"),
@@ -292,7 +313,7 @@ class CustomLeaveAllocation(LeaveAllocation):
 				frappe.bold(formatdate(date))
 			)
 			self.add_comment(comment_type="Info", text=text)
-			
+
 			frappe.msgprint(
 				_("{0} hours ({1} days) allocated successfully").format(
 					frappe.bold(f"{hours:.2f}"),
@@ -301,12 +322,21 @@ class CustomLeaveAllocation(LeaveAllocation):
 				indicator="green",
 				alert=True,
 			)
-		else:
-			msg = _("Total leaves allocated cannot exceed annual allocation of {0}.").format(
-				frappe.bold(_(annual_allocation))
+		elif new_allocation == current_total:
+			frappe.throw(
+				_("Nothing to allocate - the total would stay at {0}.").format(
+					frappe.bold(format_duration(current_total, hide_days=True))
+				),
+				title=_("No Change"),
 			)
-			msg += "<br><br>"
-			msg += _("Reference: {0}").format(get_link_to_form("Leave Policy", self.leave_policy))
+		else:
+			msg = _("This would bring leaves granted under this allocation to {0}, above the annual allocation of {1}.").format(
+				frappe.bold(format_duration(new_allocation_without_cf, hide_days=True)),
+				frappe.bold(format_duration(annual_allocation, hide_days=True)),
+			)
+			if self.leave_policy:
+				msg += "<br><br>"
+				msg += _("Reference: {0}").format(get_link_to_form("Leave Policy", self.leave_policy))
 			frappe.throw(msg, title=_("Annual Allocation Exceeded"))
 
 	@frappe.whitelist()
