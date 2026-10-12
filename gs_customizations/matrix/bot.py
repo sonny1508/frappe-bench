@@ -285,6 +285,39 @@ def send_message(room_id, message_text):
 	return response.json()
 
 
+def join_room(room_id):
+	"""Join the bot itself to a room.
+
+	POST /_matrix/client/v3/join/{room_id}
+
+	Needs an invite, or a room the bot may enter on its own (public, or
+	restricted to a space the bot is already in).
+	"""
+	settings = get_settings()
+	response = _request(
+		"POST", settings, f"/_matrix/client/v3/join/{room_id}", json={}, timeout=60,
+	)
+	return response.json()
+
+
+def set_power_levels(room_id, content):
+	"""Replace a room's m.room.power_levels state event.
+
+	PUT /_matrix/client/v3/rooms/{room_id}/state/m.room.power_levels/
+
+	`content` must be the complete event content: a state event replaces the
+	previous one wholesale. Start from the current content and change only the
+	`users` entries you mean to. The bot must be joined with enough power.
+	"""
+	settings = get_settings()
+	response = _request(
+		"PUT", settings,
+		f"/_matrix/client/v3/rooms/{room_id}/state/m.room.power_levels/",
+		json=content,
+	)
+	return response.json()
+
+
 # ---------------------------------------------------------------------------
 # Synapse Admin API
 # ---------------------------------------------------------------------------
@@ -337,5 +370,86 @@ def delete_room(room_id):
 		f"/_synapse/admin/v1/rooms/{room_id}/delete",
 		json={"purge": True},
 		timeout=30,
+	)
+	return response.json()
+
+
+def get_room_state(room_id):
+	"""Current state of any room on the server, whether or not the bot is in it.
+
+	GET /_synapse/admin/v1/rooms/{room_id}/state
+
+	Returns the list of state events, or None if the room no longer exists
+	(spaces can still list children that have since been deleted).
+	"""
+	settings = get_settings()
+
+	if not settings.bot_is_admin:
+		frappe.throw("Bot must have Synapse admin privileges to read room state.")
+
+	try:
+		response = _request("GET", settings, f"/_synapse/admin/v1/rooms/{room_id}/state")
+	except requests.exceptions.HTTPError as e:
+		if e.response is not None and e.response.status_code == 404:
+			return None
+		raise
+	return response.json().get("state", [])
+
+
+def make_room_admin(room_id, target_matrix_user_id):
+	"""Raise a user to the highest power level held by a local member of the room.
+
+	POST /_synapse/admin/v1/rooms/{room_id}/make_room_admin
+
+	Being a Synapse admin gives no power inside a room — power levels are room
+	state. Synapse works around this by sending the power-level change *as* the
+	most powerful local user still joined to the room, so that user appears as
+	the sender in the timeline. If nobody with power is left, Synapse answers
+	400 "No local admin user in room" and the room cannot be taken over this way.
+
+	If the target is not in the room and the room is not public, Synapse also
+	invites them. They still have to join.
+	"""
+	settings = get_settings()
+
+	if not settings.bot_is_admin:
+		frappe.throw("Bot must have Synapse admin privileges to use make_room_admin.")
+
+	response = _request(
+		"POST", settings,
+		f"/_synapse/admin/v1/rooms/{room_id}/make_room_admin",
+		json={"user_id": target_matrix_user_id},
+		timeout=60,
+	)
+	return response.json()
+
+
+def override_ratelimit(target_matrix_user_id):
+	"""Exempt a user from all Synapse rate limits (messages, joins, ...).
+
+	POST /_synapse/admin/v1/users/{user_id}/override_ratelimit
+
+	Synapse treats a messages_per_second of 0 in this table as "not rate
+	limited at all", not just for message sending. One-time setup for the bot,
+	which otherwise gets throttled on the first space sync.
+	"""
+	settings = get_settings()
+
+	if not settings.bot_is_admin:
+		frappe.throw("Bot must have Synapse admin privileges to override rate limits.")
+
+	response = _request(
+		"POST", settings,
+		f"/_synapse/admin/v1/users/{target_matrix_user_id}/override_ratelimit",
+		json={"messages_per_second": 0, "burst_count": 0},
+	)
+	return response.json()
+
+
+def get_ratelimit_override(target_matrix_user_id):
+	"""GET /_synapse/admin/v1/users/{user_id}/override_ratelimit — {} if none."""
+	settings = get_settings()
+	response = _request(
+		"GET", settings, f"/_synapse/admin/v1/users/{target_matrix_user_id}/override_ratelimit",
 	)
 	return response.json()

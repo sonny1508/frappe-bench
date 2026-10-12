@@ -2,7 +2,68 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Matrix Settings", {
+	setup(frm) {
+		// Only root spaces can be managed — everything inside them comes along
+		frm.set_query("managed_root_spaces", () => ({
+			filters: { room_type: "Space", parent_space: ["is", "not set"] },
+		}));
+	},
+
+	onload(frm) {
+		frappe.realtime.off("matrix_space_sync");
+		frappe.realtime.on("matrix_space_sync", (summary) => {
+			frappe.show_alert({
+				message: __("Space sync finished: {0} rooms, {1} need an admin, {2} with errors", [
+					summary.rooms, summary.needs_admin, summary.errors,
+				]),
+				indicator: summary.errors || summary.needs_admin ? "orange" : "green",
+			}, 10);
+			frm.reload_doc();
+		});
+	},
+
 	refresh(frm) {
+		frm.add_custom_button(__("Discover Root Spaces"), function () {
+			frappe.call({
+				method: "discover_root_spaces",
+				doc: frm.doc,
+				freeze: true,
+				freeze_message: __("Reading spaces from the server..."),
+				callback: function (r) {
+					if (r.message) {
+						frappe.msgprint({
+							title: __("Root Spaces"),
+							indicator: "green",
+							message: __("Found {0} root spaces ({1} new). Pick the ones to manage under Managed Root Spaces.", [
+								r.message.found, r.message.new,
+							]),
+						});
+					}
+				},
+			});
+		}, __("Spaces"));
+
+		frm.add_custom_button(__("Sync Now"), function () {
+			if (frm.is_dirty()) {
+				frappe.msgprint(__("Save first — the sync uses the saved steward list and root spaces."));
+				return;
+			}
+			frappe.call({
+				method: "sync_spaces_now",
+				doc: frm.doc,
+				callback: function () {
+					frappe.show_alert({
+						message: __("Space sync started. This page refreshes when it finishes."),
+						indicator: "blue",
+					});
+				},
+			});
+		}, __("Spaces"));
+
+		frm.add_custom_button(__("Rooms Needing Attention"), function () {
+			frappe.set_route("List", "Matrix Room", { status: ["in", ["Needs Admin", "Error"]] });
+		}, __("Spaces"));
+
 		// Test Connection button in Bot Configuration section
 		frm.add_custom_button(__("Test Connection"), function () {
 			frappe.call({

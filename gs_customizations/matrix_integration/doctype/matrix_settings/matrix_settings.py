@@ -15,6 +15,8 @@ class MatrixSettings(Document):
 		from frappe.types import DF
 		from gs_customizations.matrix_integration.doctype.matrix_dm_room.matrix_dm_room import MatrixDMRoom
 		from gs_customizations.matrix_integration.doctype.matrix_group_room.matrix_group_room import MatrixGroupRoom
+		from gs_customizations.matrix_integration.doctype.matrix_managed_space.matrix_managed_space import MatrixManagedSpace
+		from gs_customizations.matrix_integration.doctype.matrix_space_steward.matrix_space_steward import MatrixSpaceSteward
 
 		auto_provision_rooms: DF.Check
 		bot_access_token: DF.Password | None
@@ -25,11 +27,46 @@ class MatrixSettings(Document):
 		enabled: DF.Check
 		group_rooms: DF.Table[MatrixGroupRoom]
 		homeserver_url: DF.Data | None
+		managed_root_spaces: DF.TableMultiSelect[MatrixManagedSpace]
+		spaces_last_sync: DF.Datetime | None
+		spaces_last_sync_summary: DF.SmallText | None
+		spaces_sync_enabled: DF.Check
+		stewards: DF.Table[MatrixSpaceSteward]
 		test_dm_username: DF.Data | None
 		test_group_room: DF.Data | None
 		test_message: DF.SmallText | None
 		test_target_type: DF.Literal["DM", "Group"]
 	# end: auto-generated types
+
+	def validate(self):
+		self.validate_managed_root_spaces()
+		self.validate_stewards()
+
+	def validate_managed_root_spaces(self):
+		seen = set()
+		for row in self.managed_root_spaces:
+			if row.space in seen:
+				frappe.throw(f"Root space {row.space} is listed twice.")
+			seen.add(row.space)
+			room_type, parent_space = frappe.db.get_value(
+				"Matrix Room", row.space, ["room_type", "parent_space"]
+			) or (None, None)
+			if room_type != "Space" or parent_space:
+				frappe.throw(f"{row.space} is not a root space. Pick one found by Discover Root Spaces.")
+
+	def validate_stewards(self):
+		from gs_customizations.matrix.spaces import matrix_user_id_for_employee
+
+		seen = set()
+		for row in self.stewards:
+			if row.employee in seen:
+				frappe.throw(f"Steward {row.employee} is listed twice.")
+			seen.add(row.employee)
+			if not matrix_user_id_for_employee(row.employee, self):
+				frappe.throw(
+					f"Steward {row.employee_name or row.employee} has no linked User with a username, "
+					"so their Matrix ID is unknown."
+				)
 
 	@frappe.whitelist()
 	def test_connection(self):
@@ -109,3 +146,15 @@ class MatrixSettings(Document):
 				frappe.logger("matrix").error(f"Failed to delete room {room_id}: {e}")
 
 		return {"deleted": deleted, "failed": failed, "errors": errors}
+
+	@frappe.whitelist()
+	def discover_root_spaces(self):
+		"""Register every root space on the server so it can be picked as managed."""
+		from gs_customizations.matrix.spaces import discover_root_spaces
+		return discover_root_spaces()
+
+	@frappe.whitelist()
+	def sync_spaces_now(self):
+		"""Run the space sync in the background; the form is told when it finishes."""
+		from gs_customizations.matrix.spaces import enqueue_sync
+		enqueue_sync(notify_user=frappe.session.user)

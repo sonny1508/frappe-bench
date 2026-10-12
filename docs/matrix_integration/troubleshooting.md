@@ -74,6 +74,19 @@ endpoint. This is expected behavior.
 provisioning code creates a new room instead of reusing an existing one.
 This may result in duplicate rooms but doesn't break functionality.
 
+## Room stuck in "Needs Admin"
+
+**Symptom**: Matrix Room status is Needs Admin; Last Error says nobody with
+power is left in the room.
+
+**Cause**: Every admin of the room has left. A Synapse server admin has no power
+inside a room, and `make_room_admin` can only borrow power from a local member
+who is still joined.
+
+**Fix**: Someone who used to be Admin there rejoins (in Element, from the
+parent space — restricted rooms let space members join), then Matrix Settings →
+Spaces → Sync Now. If nobody can, the room has to be recreated.
+
 ## 500 on PUT send_message
 
 **Symptom**: Sending a message to a group room returns 500 Internal Server

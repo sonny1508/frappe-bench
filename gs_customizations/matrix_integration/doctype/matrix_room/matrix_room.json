@@ -1,0 +1,160 @@
+{
+ "actions": [],
+ "autoname": "field:room_id",
+ "creation": "2026-10-12 00:00:00.000000",
+ "description": "A Matrix space or room, as last seen by the space sync. Created and updated by the sync — not edited by hand.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "room_name",
+  "room_type",
+  "status",
+  "column_break_main",
+  "room_id",
+  "parent_space",
+  "root_space",
+  "section_server",
+  "join_rule",
+  "joined_members",
+  "bot_power_level",
+  "column_break_server",
+  "last_synced",
+  "last_error"
+ ],
+ "fields": [
+  {
+   "fieldname": "room_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "room_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Type",
+   "options": "Space\nRoom",
+   "read_only": 1
+  },
+  {
+   "default": "Not Managed",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "OK\nNeeds Admin\nError\nNot Managed",
+   "read_only": 1,
+   "description": "Needs Admin: nobody with power is left in the room, so gs.bot cannot take it over. Someone who was Admin there must rejoin."
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "room_id",
+   "fieldtype": "Data",
+   "label": "Room ID",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "parent_space",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Parent Space",
+   "options": "Matrix Room",
+   "read_only": 1
+  },
+  {
+   "fieldname": "root_space",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Root Space",
+   "options": "Matrix Room",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_server",
+   "fieldtype": "Section Break",
+   "label": "On the Server"
+  },
+  {
+   "fieldname": "join_rule",
+   "fieldtype": "Data",
+   "label": "Join Rule",
+   "read_only": 1
+  },
+  {
+   "fieldname": "joined_members",
+   "fieldtype": "Int",
+   "label": "Joined Members",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bot_power_level",
+   "fieldtype": "Int",
+   "label": "Bot Power Level",
+   "read_only": 1,
+   "description": "gs.bot's power level here. 0 if the bot is not in the room."
+  },
+  {
+   "fieldname": "column_break_server",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_synced",
+   "fieldtype": "Datetime",
+   "label": "Last Synced",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Last Error",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "links": [
+  {
+   "group": "Matrix",
+   "link_doctype": "Matrix Room Member",
+   "link_fieldname": "room"
+  },
+  {
+   "group": "Matrix",
+   "link_doctype": "Matrix Room",
+   "link_fieldname": "parent_space"
+  }
+ ],
+ "modified": "2026-10-12 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Matrix Integration",
+ "name": "Matrix Room",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "room_name,room_type",
+ "show_title_field_in_link": 1,
+ "sort_field": "room_name",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "room_name"
+}

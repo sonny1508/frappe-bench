@@ -60,6 +60,7 @@ gs_customizations/
     provisioning.py                    # DM room creation logic
     notifications.py                   # Task notification hooks (mirrors synology.py)
     polls.py                           # Food poll reading + MSC3381 tally
+    spaces.py                          # Managed spaces: steward sync engine
 
   matrix_integration/                  # Frappe module (DocTypes)
     __init__.py
@@ -81,7 +82,14 @@ gs_customizations/
         food_poll_list.js
       food_poll_option/                # Child table — menu options
       food_poll_vote/                  # Child table — one row per person
+      matrix_room/                     # Registry of spaces + rooms (sync-owned)
+      matrix_room_member/              # One row per person per room
+      matrix_managed_space/            # Child table — managed root spaces
+      matrix_space_steward/            # Child table — steward list
 ```
+
+See `spaces.md` for managed spaces: keeping stewards in every space and room
+under chosen root spaces at Moderator or above.
 
 See `food-polls.md` for the food poll workflow. It is deliberately separate
 from Matrix Settings so the producer can record votes without access to the
@@ -89,7 +97,8 @@ bot token.
 
 ## Related files (not in matrix/)
 
-- `hooks.py` — doc_events wiring for Task on_update, ToDo after_insert, Employee on_update
+- `hooks.py` — doc_events wiring for Task on_update, ToDo after_insert, Employee on_update;
+  scheduler cron (every 10 min) for the space sync
 - `customize/customize_fields.py` — `custom_enable_matrix_notifications` Check field on Employee
 - `patches/add_employee_matrix_field.py` — migration patch for the custom field
 - `modules.txt` — includes "Matrix Integration" as a Frappe module

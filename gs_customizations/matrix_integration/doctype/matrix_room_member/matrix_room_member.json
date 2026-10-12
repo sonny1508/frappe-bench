@@ -1,0 +1,241 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-10-12 00:00:00.000000",
+ "description": "One person in one Matrix space or room. The space sync adds them once and keeps their power level at or above Minimum Role.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "employee",
+  "employee_name",
+  "matrix_user_id",
+  "column_break_person",
+  "department",
+  "designation",
+  "employee_status",
+  "section_room",
+  "room",
+  "room_name",
+  "column_break_room",
+  "room_type",
+  "root_space",
+  "section_rule",
+  "min_role",
+  "enforce",
+  "column_break_rule",
+  "source",
+  "section_status",
+  "membership",
+  "current_power_level",
+  "last_error",
+  "column_break_status",
+  "joined_before",
+  "added_by_bot_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Employee",
+   "options": "Employee",
+   "search_index": 1
+  },
+  {
+   "fetch_from": "employee.employee_name",
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Employee Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "matrix_user_id",
+   "fieldtype": "Data",
+   "label": "Matrix User ID",
+   "reqd": 1,
+   "search_index": 1,
+   "description": "Filled in from the employee's username, e.g. @sonny.nguyen.01:glenda-studio-chat.com"
+  },
+  {
+   "fieldname": "column_break_person",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "employee.department",
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Department",
+   "options": "Department",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "employee.designation",
+   "fieldname": "designation",
+   "fieldtype": "Link",
+   "label": "Designation",
+   "options": "Designation",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "employee.status",
+   "fieldname": "employee_status",
+   "fieldtype": "Data",
+   "label": "Employee Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_room",
+   "fieldtype": "Section Break",
+   "label": "Room"
+  },
+  {
+   "fieldname": "room",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Room",
+   "options": "Matrix Room",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "room.room_name",
+   "fieldname": "room_name",
+   "fieldtype": "Data",
+   "label": "Room Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_room",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "room.room_type",
+   "fieldname": "room_type",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Room Type",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "room.root_space",
+   "fieldname": "root_space",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Root Space",
+   "options": "Matrix Room",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_rule",
+   "fieldtype": "Section Break",
+   "label": "Rule"
+  },
+  {
+   "default": "Default",
+   "fieldname": "min_role",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Minimum Role",
+   "options": "Default\nModerator\nAdmin",
+   "description": "Raised to this level whenever they are below it. Never lowered. For stewards this follows the steward list."
+  },
+  {
+   "default": "1",
+   "fieldname": "enforce",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Enforce",
+   "description": "Untick to stop managing this person in this room. The sync never ticks it again."
+  },
+  {
+   "fieldname": "column_break_rule",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Manual",
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Source",
+   "options": "Manual\nSteward",
+   "read_only": 1,
+   "description": "Steward: created from the steward list in Matrix Settings → Spaces, and removed when the person is taken off it."
+  },
+  {
+   "fieldname": "section_status",
+   "fieldtype": "Section Break",
+   "label": "On the Server"
+  },
+  {
+   "fieldname": "membership",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Membership",
+   "options": "\nJoined\nInvited\nLeft\nBanned\nNot Joined",
+   "read_only": 1
+  },
+  {
+   "fieldname": "current_power_level",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Current Power Level",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Last Error",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "joined_before",
+   "fieldtype": "Check",
+   "label": "Joined Before",
+   "read_only": 1,
+   "description": "Ticked once this person has been in the room (or had already left before syncing started). From then on, leaving is respected and the bot will not add them back."
+  },
+  {
+   "fieldname": "added_by_bot_on",
+   "fieldtype": "Datetime",
+   "label": "Added by Bot On",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-10-12 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Matrix Integration",
+ "name": "Matrix Room Member",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "import": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "employee_name,room_name",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "employee_name"
+}

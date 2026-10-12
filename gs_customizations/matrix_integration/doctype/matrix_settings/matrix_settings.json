@@ -5,6 +5,7 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "general_tab",
   "bot_configuration_section",
   "enabled",
   "homeserver_url",
@@ -24,9 +25,24 @@
   "column_break_dev",
   "test_target_type",
   "test_dm_username",
-  "test_group_room"
+  "test_group_room",
+  "spaces_tab",
+  "spaces_sync_section",
+  "spaces_sync_enabled",
+  "spaces_last_sync",
+  "column_break_spaces",
+  "spaces_last_sync_summary",
+  "managed_spaces_section",
+  "managed_root_spaces",
+  "stewards_section",
+  "stewards"
  ],
  "fields": [
+  {
+   "fieldname": "general_tab",
+   "fieldtype": "Tab Break",
+   "label": "General"
+  },
   {
    "fieldname": "bot_configuration_section",
    "fieldtype": "Section Break",
@@ -144,11 +160,68 @@
    "fieldtype": "Data",
    "label": "Group Room Name",
    "description": "Room name from the Group Rooms table"
+  },
+  {
+   "fieldname": "spaces_tab",
+   "fieldtype": "Tab Break",
+   "label": "Spaces"
+  },
+  {
+   "fieldname": "spaces_sync_section",
+   "fieldtype": "Section Break",
+   "description": "Keeps the stewards below in every space and room under the managed root spaces, at their minimum role or above. Power levels are restored on every sync and never lowered. Each person is added to a room once; if they leave, that is respected."
+  },
+  {
+   "default": "0",
+   "fieldname": "spaces_sync_enabled",
+   "fieldtype": "Check",
+   "label": "Keep Managed Spaces in Sync",
+   "description": "Runs every 10 minutes. Use Spaces → Sync Now to run it immediately."
+  },
+  {
+   "fieldname": "spaces_last_sync",
+   "fieldtype": "Datetime",
+   "label": "Last Sync",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_spaces",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "spaces_last_sync_summary",
+   "fieldtype": "Small Text",
+   "label": "Last Sync Result",
+   "read_only": 1
+  },
+  {
+   "fieldname": "managed_spaces_section",
+   "fieldtype": "Section Break",
+   "label": "Managed Root Spaces"
+  },
+  {
+   "fieldname": "managed_root_spaces",
+   "fieldtype": "Table MultiSelect",
+   "label": "Managed Root Spaces",
+   "options": "Matrix Managed Space",
+   "description": "Pick from the root spaces found by Spaces → Discover Root Spaces. Everything inside them, at any depth, is managed."
+  },
+  {
+   "fieldname": "stewards_section",
+   "fieldtype": "Section Break",
+   "label": "Stewards"
+  },
+  {
+   "fieldname": "stewards",
+   "fieldtype": "Table",
+   "label": "Stewards",
+   "options": "Matrix Space Steward",
+   "description": "Added to every managed space and room. Taking someone off this list only stops enforcement; nobody is demoted or removed."
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-05-19 00:00:00.000000",
+ "modified": "2026-10-12 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Matrix Integration",
  "name": "Matrix Settings",

@@ -34,6 +34,20 @@ reference. Note the ToDo `after_insert` list is now shared with Task field
 automation, and `notify_todo_insert` does an unguarded
 `frappe.get_doc("Task", ...)`, so it stays last in the list.
 
+## Scheduler
+
+```python
+scheduler_events = {
+    "cron": {
+        "*/10 * * * *": ["gs_customizations.matrix.spaces.scheduled_sync"],
+    },
+}
+```
+
+`scheduled_sync` returns immediately unless both Matrix Settings → Enable Matrix
+Integration and Spaces → Keep Managed Spaces in Sync are ticked. The job type
+is created by `bench migrate`. See [spaces.md](spaces.md).
+
 ## How to disable Synology
 
 When migration is complete, remove the Synology entries from the lists:

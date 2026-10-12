@@ -56,6 +56,24 @@ field to build all other user IDs.
 | `test_dm_username` | Data | Username for DM test (shown when target=DM) |
 | `test_group_room` | Data | Room name for group test (shown when target=Group) |
 
+### Spaces tab
+
+Configuration for managed spaces — see [spaces.md](spaces.md).
+
+| Field | Type | Notes |
+|---|---|---|
+| `spaces_sync_enabled` | Check | Gates the 10-minute scheduled sync |
+| `spaces_last_sync` | Datetime | Read-only, written by the sync |
+| `spaces_last_sync_summary` | Small Text | Read-only, e.g. "4 rooms: 4 OK, ..." |
+| `managed_root_spaces` | Table MultiSelect (Matrix Managed Space) | Links to Matrix Room; only root spaces are offered |
+| `stewards` | Table (Matrix Space Steward) | Employee + Minimum Role (Moderator / Admin) |
+
+The sync writes the two read-only fields with `update_modified=False`, so it
+never causes "document has been modified" on an open form.
+
+`validate()` rejects a root space that is not a root space, duplicates, and a
+steward without a User username (their Matrix ID would be unknown).
+
 ## Buttons (defined in matrix_settings.js)
 
 | Button | Group | Method | Description |
@@ -63,6 +81,9 @@ field to build all other user IDs.
 | Test Connection | Bot | `test_connection()` | Calls whoami to verify PAT |
 | Provision DM Rooms | Rooms | `provision_all_dm_rooms()` | Bulk-provision rows without room_id |
 | Send Test Message | Dev | `send_test_message()` | Send to DM (server notice) or group room |
+| Discover Root Spaces | Spaces | `discover_root_spaces()` | Register every root space as a Matrix Room |
+| Sync Now | Spaces | `sync_spaces_now()` | Enqueue the space sync; form reloads when done (realtime `matrix_space_sync`) |
+| Rooms Needing Attention | Spaces | — | Matrix Room list filtered to Needs Admin / Error |
 
 ## Controller methods (matrix_settings.py)
 

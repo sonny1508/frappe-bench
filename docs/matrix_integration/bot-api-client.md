@@ -40,9 +40,14 @@ because Synapse tried to federate invites to `matrix.glenda-studio-chat.com`
 ### POST vs PUT for send_message
 
 The Matrix spec defines PUT for sending messages (with a transaction ID for
-idempotency). Our Synapse + reverse proxy setup returns 500 on PUT. We use
-POST instead, which works correctly. No transaction ID is needed since we
-don't retry failed sends.
+idempotency). Our setup returns 500 on `PUT /send/{txnId}`. We use POST
+instead, which works correctly. No transaction ID is needed since we don't
+retry failed sends.
+
+PUT in general is fine: `set_power_levels()` uses `PUT /state/...` and works
+(verified 2026-10-12). The 500 is likely specific to transaction-ID endpoints:
+the MAS PAT has no device ID (`whoami` returns none), and Synapse keys
+transaction IDs on the device. Not confirmed.
 
 ### HTML formatting
 
@@ -105,6 +110,18 @@ accepted the invite.
 a DM room already exists. Best-effort: returns None on 403 (MAS PATs lack
 scope for account_data) or 404 (no m.direct data yet). Provisioning creates a
 new room if this returns None.
+
+### Space sync functions
+
+Used by `spaces.py` — see [spaces.md](spaces.md).
+
+| Function | Endpoint | Notes |
+|---|---|---|
+| `get_room_state(room_id)` | `GET /_synapse/admin/v1/rooms/{room}/state` | Any room, bot need not be a member. Returns None on 404 (room deleted). |
+| `make_room_admin(room_id, user_id)` | `POST /_synapse/admin/v1/rooms/{room}/make_room_admin` | Sent *as* the strongest joined local user. 400 if nobody with power is left. |
+| `join_room(room_id)` | `POST /_matrix/client/v3/join/{room}` | Bot joins itself |
+| `set_power_levels(room_id, content)` | `PUT /_matrix/client/v3/rooms/{room}/state/m.room.power_levels/` | Pass the *complete* content — state events replace wholesale |
+| `override_ratelimit(user_id)` / `get_ratelimit_override(user_id)` | `/_synapse/admin/v1/users/{user}/override_ratelimit` | One-time bot setup |
 
 ## Error handling
 

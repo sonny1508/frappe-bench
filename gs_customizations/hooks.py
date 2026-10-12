@@ -298,7 +298,13 @@ doc_events = {
 scheduler_events = {
 	"daily_long": [
 		"gs_customizations.utils.hrms.allocate_earned_leaves",
-	]
+	],
+	"cron": {
+		# Matrix space stewards — see docs/matrix_integration/spaces.md
+		"*/10 * * * *": [
+			"gs_customizations.matrix.spaces.scheduled_sync",
+		],
+	},
     # "cron": {
     #     "0 17 * * *": [
     #         "gs_customizations.synology.synology_schedule.schedule_daily_timesheet"
