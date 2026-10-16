@@ -1,6 +1,8 @@
+from itertools import groupby
+
 import frappe
 from frappe import _
-from frappe.utils import cint, getdate, get_first_day, get_last_day
+from gs_customizations.gs_customizations.report.period import set_period_dates
 from gs_customizations.validate.permissions import is_manager
 
 # Task columns the date range may be applied to. The chosen value is
@@ -11,7 +13,7 @@ DEFAULT_DATE_FIELD = "completed_on"
 
 
 def get_date_field(filters):
-    """Which Task date column the Month / Date Range filter applies to."""
+    """Which Task date column the Filter Based On period applies to."""
     field = filters.get("date_field") or DEFAULT_DATE_FIELD
 
     if field not in DATE_FIELDS:
@@ -25,34 +27,13 @@ def execute(filters=None):
     Main execution function for the GS Task Sheet Report
     """
     filters = frappe._dict(filters or {})
-    
-    # Validate filters
-    if not filters.filter_based_on:
-        frappe.throw(_("Please select Filter Based On"))
-    
-    # Month/Year always have a sensible value, so there is nothing to nag about.
-    # Falling back here rather than throwing also stops an empty year from turning
-    # into an unbounded query - get_conditions() skips the date clause entirely
-    # when either is missing.
-    if filters.filter_based_on == "Month":
-        today = getdate()
-        filters.month = cint(filters.month) or today.month
-        filters.year = cint(filters.year) or today.year
-    
-    if filters.filter_based_on == "Date Range":
-        if not (filters.start_date and filters.end_date):
-            frappe.throw(_("Please set the date range."))
-        if getdate(filters.start_date) > getdate(filters.end_date):
-            frappe.throw(_("Start date cannot be greater than end date."))
-    
-    columns = get_columns()
+    set_period_dates(filters)
+
     data = get_data(filters)
-    
     if not data:
         frappe.msgprint(_("No task records found for this criteria."), alert=True, indicator="orange")
-        return columns, [], None, None
-    
-    return columns, data, None, None
+
+    return get_columns(), data, None, None
 
 
 def get_columns():
@@ -190,9 +171,7 @@ def get_data(filters):
         SELECT 
             name,
             subject,
-            project,
             custom_project_name,
-            issue,
             custom_issue_name,
             status,
             type,
@@ -227,28 +206,12 @@ def get_data(filters):
 
 def get_conditions(filters):
     """Build SQL conditions based on filters"""
-    conditions = ""
-
     # Safe to interpolate: get_date_field() resolves through a whitelist.
-    date_field = get_date_field(filters)
+    conditions = f" AND {get_date_field(filters)} BETWEEN %(start_date)s AND %(end_date)s"
 
-    # Date filtering - same approach as HRMS
-    if filters.filter_based_on == "Month":
-        if filters.month and filters.year:
-            # Convert to integers using cint()
-            month = cint(filters.month)
-            year = cint(filters.year)
-            # Get first and last day of the selected month
-            first_day = get_first_day(f"{year}-{month:02d}-01")
-            last_day = get_last_day(f"{year}-{month:02d}-01")
-            conditions += f" AND {date_field} BETWEEN '{first_day}' AND '{last_day}'"
-    
-    elif filters.filter_based_on == "Date Range":
-        if filters.start_date:
-            conditions += f" AND {date_field} >= %(start_date)s"
-        if filters.end_date:
-            conditions += f" AND {date_field} <= %(end_date)s"
-    
+    if filters.get("project"):
+        conditions += " AND project = %(project)s"
+
     # Status filter. "All" is written as an exclusion rather than a list of every
     # status: an inclusion list silently drops any status added to Task later,
     # which is the one failure mode nobody notices.
@@ -297,7 +260,7 @@ def get_conditions(filters):
 
 def calculate_utilization(actual_time, expected_time):
     """Calculate utilization percentage"""
-    if not expected_time or expected_time == 0:
+    if not expected_time:
         return 0
     return (actual_time or 0) / expected_time * 100
 
@@ -306,11 +269,6 @@ def process_grouped_data(data):
     Process data to add tree structure for grouping
     Similar to how HRMS Monthly Attendance Sheet works
     """
-    from itertools import groupby
-    
-    if not data:
-        return data
-    
     result = []
     
     # Group by the assignee. Was custom_completed_by_employee, which is blank for
@@ -335,8 +293,6 @@ def process_grouped_data(data):
             "custom_completed_by_employee": assignee_name,
             "name": "",
             "subject": "",
-            "project": "",
-            "issue": "",
             "status": "",
             "type": "",
             "is_group": 0,

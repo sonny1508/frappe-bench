@@ -2,7 +2,6 @@
 # License: GNU General Public License v3. See license.txt
 
 
-from calendar import monthrange
 from datetime import date
 from itertools import groupby
 
@@ -13,10 +12,12 @@ import frappe
 from frappe import _
 from frappe.query_builder import Case
 from frappe.query_builder.functions import Count, Extract, Sum
-from frappe.utils import cint, cstr, formatdate, getdate
+from frappe.utils import cstr, formatdate, getdate
 from frappe.utils.nestedset import get_descendants_of
 
 from hrms.utils import date_diff, get_date_range
+
+from gs_customizations.gs_customizations.report.period import set_period_dates
 
 Filters = frappe._dict
 
@@ -40,20 +41,11 @@ day_abbr = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 def execute(filters: Filters | None = None) -> tuple:
 	filters = frappe._dict(filters or {})
+	set_period_dates(filters)
 
-	if not filters.filter_based_on:
-		frappe.throw(_("Please select Filter Based On"))
-
-	if filters.filter_based_on == "Month" and not (filters.month and filters.year):
-		frappe.throw(_("Please select month and year."))
-
-	if filters.filter_based_on == "Date Range":
-		if not (filters.start_date and filters.end_date):
-			frappe.throw(_("Please set the date range."))
-		if getdate(filters.start_date) > getdate(filters.end_date):
-			frappe.throw(_("Start date cannot be greater than end date."))
-		if date_diff(filters.end_date, filters.start_date) > 90:
-			frappe.throw(_("Please set a date range less than 90 days."))
+	# Only a Date Range can run this long - both month options cover a month.
+	if date_diff(filters.end_date, filters.start_date) > 90:
+		frappe.throw(_("Please set a date range less than 90 days."))
 
 	if not filters.company:
 		frappe.throw(_("Please select company."))
@@ -238,29 +230,12 @@ def get_columns_for_days(filters: Filters) -> list[dict]:
 	return days
 
 
-def get_dates_in_period(filters: Filters) -> list[str]:
-	dates_in_period = []
-	if filters.filter_based_on == "Month":
-		total_days = get_total_days_in_month(filters)
-		# forms the datelist from selected year and month from filters
-		dates_in_period = [
-			f"{cstr(filters.year)}-{cstr(filters.month)}-{cstr(day)}" for day in range(1, total_days + 1)
-		]
-	if filters.filter_based_on == "Date Range":
-		dates_in_period = get_date_range(filters.start_date, filters.end_date)
-
-	return dates_in_period
-
-
-def get_total_days_in_month(filters: Filters) -> int:
-	return monthrange(cint(filters.year), cint(filters.month))[1]
+def get_dates_in_period(filters: Filters) -> list[date]:
+	return get_date_range(filters.start_date, filters.end_date)
 
 
 def get_date_condition(docfield: Field, filters: Filters) -> Criterion:
-	if filters.filter_based_on == "Month":
-		return (Extract("month", docfield) == filters.month) & (Extract("year", docfield) == filters.year)
-	if filters.filter_based_on == "Date Range":
-		return (docfield >= filters.start_date) & (docfield <= filters.end_date)
+	return docfield.between(filters.start_date, filters.end_date)
 
 
 def get_data(filters: Filters, attendance_map: dict) -> list[dict]:
@@ -596,7 +571,7 @@ def get_attendance_status_for_summarized_view(
 	
 	for d in total_days:
 		d = getdate(d)
-		if d.day in attendance_days or (joined_in_current_period and d < joined_date):
+		if d in attendance_days or (joined_in_current_period and d < joined_date):
 			continue
 		status = get_holiday_status(d, holidays)
 		if status in ["Weekly Off", "Holiday"]:
@@ -656,7 +631,7 @@ def get_attendance_summary_and_days(employee: str, filters: Filters) -> tuple[di
 
 	days = (
 		frappe.qb.from_(Attendance)
-		.select(Extract("day", Attendance.attendance_date).as_("day_of_month"))
+		.select(Attendance.attendance_date)
 		.distinct()
 		.where(
 			(Attendance.docstatus == 1)

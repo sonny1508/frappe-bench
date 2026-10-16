@@ -4,23 +4,15 @@ frappe.query_reports["GS Task Sheet"] = {
             fieldname: "filter_based_on",
             label: __("Filter Based On"),
             fieldtype: "Select",
-            options: ["Month", "Date Range"],
+            options: ["Month", "Glenda Studio Interactive", "Date Range"],
             default: "Month",
             reqd: 1,
             on_change: (report) => {
-                let filter_based_on = frappe.query_report.get_filter_value("filter_based_on");
-                if (filter_based_on == "Month") {
-                    set_reqd_filter("month", true);
-                    set_reqd_filter("year", true);
-                    set_reqd_filter("start_date", false);
-                    set_reqd_filter("end_date", false);
-                }
-                if (filter_based_on == "Date Range") {
-                    set_reqd_filter("month", false);
-                    set_reqd_filter("year", false);
-                    set_reqd_filter("start_date", true);
-                    set_reqd_filter("end_date", true);
-                }
+                let by_range = frappe.query_report.get_filter_value("filter_based_on") == "Date Range";
+                set_reqd_filter("month", !by_range);
+                set_reqd_filter("year", !by_range);
+                set_reqd_filter("start_date", by_range);
+                set_reqd_filter("end_date", by_range);
                 report.refresh();
             },
         },
@@ -54,14 +46,15 @@ frappe.query_reports["GS Task Sheet"] = {
                 { value: 12, label: __("Dec") },
             ],
             default: frappe.datetime.str_to_obj(frappe.datetime.get_today()).getMonth() + 1,
-            depends_on: "eval:doc.filter_based_on == 'Month'",
+            depends_on: "eval:doc.filter_based_on != 'Date Range'",
         },
         {
             fieldname: "year",
             label: __("Year"),
             fieldtype: "Select",
-            depends_on: "eval:doc.filter_based_on == 'Month'",
-            default: frappe.datetime.str_to_obj(frappe.datetime.get_today()).getFullYear(),
+            options: year_options(),
+            default: year_options()[0],
+            depends_on: "eval:doc.filter_based_on != 'Date Range'",
         },
         {
             fieldname: "start_date",
@@ -76,6 +69,13 @@ frappe.query_reports["GS Task Sheet"] = {
             fieldtype: "Date",
             depends_on: "eval:doc.filter_based_on == 'Date Range'",
             on_change: validate_date_range,
+        },
+        {
+            fieldname: "project",
+            label: __("Project"),
+            fieldtype: "Link",
+            options: "Project",
+            get_query: () => ({ filters: { status: "Open" } }),
         },
         {
             fieldname: "status",
@@ -134,25 +134,6 @@ frappe.query_reports["GS Task Sheet"] = {
     ],
     
     onload: function(report) {
-        // Populate year options
-        let year_filter = report.filters.find(f => f.df.fieldname === "year");
-        if (year_filter) {
-            let current_year = frappe.datetime.str_to_obj(frappe.datetime.get_today()).getFullYear();
-            let years = [];
-            for (let i = current_year; i >= current_year - 10; i--) {
-                years.push({ value: i, label: i.toString() });
-            }
-            year_filter.df.options = years;
-            year_filter.refresh();
-
-            // setup_filters() applied the default before these options existed, and a
-            // <select> given a value with no matching <option> silently keeps "" -
-            // which is what produced the "Please select month and year" error.
-            if (!year_filter.get_value()) {
-                year_filter.set_value(current_year);
-            }
-        }
-
         move_toggles_to_own_row(report);
     },
     
@@ -256,6 +237,13 @@ function apply_md_column_visibility(datatable) {
     style.id = MD_STYLE_ID;
     style.textContent = `${selectors.join(", ")} { display: none !important; }`;
     document.head.appendChild(style);
+}
+
+// The current year and the ten before it, newest first. Given to the Select up
+// front so its default has a matching <option> when the filters are built.
+function year_options() {
+    let current_year = frappe.datetime.str_to_obj(frappe.datetime.get_today()).getFullYear();
+    return Array.from({ length: 11 }, (_, i) => String(current_year - i));
 }
 
 function set_reqd_filter(fieldname, required) {

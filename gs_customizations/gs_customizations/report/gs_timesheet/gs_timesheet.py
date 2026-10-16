@@ -2,15 +2,13 @@ import frappe
 from frappe import _
 from frappe.desk.reportview import build_match_conditions
 from collections import defaultdict
+from gs_customizations.gs_customizations.report.period import set_period_dates
 from gs_customizations.validate.permissions import is_manager
 
 
 def execute(filters=None):
-	if not filters:
-		filters = {}
-	elif filters.get("from_date") or filters.get("to_date"):
-		filters["from_time"] = "00:00:00"
-		filters["to_time"] = "24:00:00"
+	filters = frappe._dict(filters or {})
+	set_period_dates(filters)
 
 	columns = get_column()
 	conditions = get_conditions(filters)
@@ -89,11 +87,11 @@ def get_data(conditions, filters):
 
 
 def get_conditions(filters):
-	conditions = "`tabTimesheet`.docstatus = 1"
-	if filters.get("from_date"):
-		conditions += " and `tabTimesheet Detail`.from_time >= timestamp(%(from_date)s, %(from_time)s)"
-	if filters.get("to_date"):
-		conditions += " and `tabTimesheet Detail`.to_time <= timestamp(%(to_date)s, %(to_time)s)"
+	conditions = (
+		"`tabTimesheet`.docstatus = 1"
+		" and `tabTimesheet Detail`.from_time >= timestamp(%(start_date)s, '00:00:00')"
+		" and `tabTimesheet Detail`.to_time <= timestamp(%(end_date)s, '24:00:00')"
+	)
 
 	match_conditions = build_match_conditions("Timesheet")
 	if match_conditions:

@@ -7,24 +7,15 @@ frappe.query_reports["GS PTO Sheet"] = {
 			fieldname: "filter_based_on",
 			label: __("Filter Based On"),
 			fieldtype: "Select",
-			options: ["Month", "Date Range"],
+			options: ["Month", "Glenda Studio Interactive", "Date Range"],
 			default: "Month",
 			reqd: 1,
 			on_change: (report) => {
-				let filter_based_on = frappe.query_report.get_filter_value("filter_based_on");
-
-				if (filter_based_on == "Month") {
-					set_reqd_filter("month", true);
-					set_reqd_filter("year", true);
-					set_reqd_filter("start_date", false);
-					set_reqd_filter("end_date", false);
-				}
-				if (filter_based_on == "Date Range") {
-					set_reqd_filter("month", false);
-					set_reqd_filter("year", false);
-					set_reqd_filter("start_date", true);
-					set_reqd_filter("end_date", true);
-				}
+				let by_range = frappe.query_report.get_filter_value("filter_based_on") == "Date Range";
+				set_reqd_filter("month", !by_range);
+				set_reqd_filter("year", !by_range);
+				set_reqd_filter("start_date", by_range);
+				set_reqd_filter("end_date", by_range);
 				report.refresh();
 			},
 		},
@@ -47,7 +38,7 @@ frappe.query_reports["GS PTO Sheet"] = {
 				{ value: 12, label: __("Dec") },
 			],
 			default: frappe.datetime.str_to_obj(frappe.datetime.get_today()).getMonth() + 1,
-			depends_on: "eval:doc.filter_based_on == 'Month'",
+			depends_on: "eval:doc.filter_based_on != 'Date Range'",
 		},
 		{
 			fieldname: "start_date",
@@ -67,7 +58,7 @@ frappe.query_reports["GS PTO Sheet"] = {
 			fieldname: "year",
 			label: __("Year"),
 			fieldtype: "Select",
-			depends_on: "eval:doc.filter_based_on == 'Month'",
+			depends_on: "eval:doc.filter_based_on != 'Date Range'",
 		},
 		{
 			fieldname: "employee",
