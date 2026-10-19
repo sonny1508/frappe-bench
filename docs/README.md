@@ -11,7 +11,7 @@ Start here if you are new to the app, then read the area you are working in.
 |---|---|
 | `overrides/<app>/<doctype>/` | Controller overrides, mirroring the upstream app's own layout |
 | `customize/customize_fields.py` | Every Custom Field and Property Setter, declared in code |
-| `gs_customizations/report/` | Script reports (GS Task Sheet, GS Timesheet, GS PTO Sheet) |
+| `gs_customizations/report/` | Script reports (GS Task Sheet, GS Timesheet, GS PTO Sheet, GS Workload Sheet, GS Task Pool) |
 | `maintenance/` | One-off `bench execute` data scripts — see [maintenance-scripts.md](maintenance-scripts.md) |
 | `patches/` + `patches.txt` | Migration patches that run on `bench migrate` |
 | `matrix/`, `matrix_integration/` | Element/Matrix notifications and Food Poll doctypes |
@@ -68,6 +68,7 @@ site_config.
 
 - [Task overrides](erpnext/task/task-overrides.md) — `CustomTask`, assignment-driven fields, permissions
 - [GS Task Sheet report](erpnext/task/gs-task-sheet.md) — filters, columns, export behaviour
+- [GS Workload Sheet and GS Task Pool](erpnext/task/gs-workload-sheet.md) — current assignments per employee, and the unassigned tasks
 - [Leave Ledger Entry](hrms/leave-ledger-entry.md) — the override and the upstream data-loss bug it fixes
 - [Maintenance scripts](maintenance-scripts.md) — `bench execute` one-offs and how to write one
 - [Timesheet overrides](erpnext/timesheet/timesheet_overrides.md), [Timesheet check-in](erpnext/timesheet/timesheet_checkin.md)
