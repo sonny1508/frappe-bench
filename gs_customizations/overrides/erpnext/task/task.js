@@ -1,6 +1,7 @@
 frappe.ui.form.on('Task', {
     status: function(frm) {
         update_completed_by_from_assigned_to(frm);
+        apply_overdue_priority_rules(frm);
     },
 
     priority: function(frm) {
@@ -9,6 +10,7 @@ frappe.ui.form.on('Task', {
 
     refresh: function(frm) {
         set_color_by_priority(frm);
+        apply_overdue_priority_rules(frm);
     },
     
     onload: function(frm) {
@@ -39,8 +41,41 @@ function update_completed_by_from_assigned_to(frm) {
     }
 }
 
+// The Overdue priority is set by the server once a task passes its Expected End
+// Date, and stays until the date is moved later (overdue_priority.py). The form
+// only mirrors that: Overdue is left out of the dropdown, and the field is
+// locked while an unfinished task is Overdue. The server enforces both anyway.
+const OVERDUE_PRIORITY = "Overdue";
+const FINISHED_STATUSES = ["Completed", "Closed", "Cancelled", "Template"];
+
+function apply_overdue_priority_rules(frm) {
+    const meta_df = frappe.get_meta("Task").fields.find((df) => df.fieldname === "priority");
+    if (!meta_df) return;
+
+    const is_overdue = frm.doc.priority === OVERDUE_PRIORITY;
+    const locked = is_overdue && !FINISHED_STATUSES.includes(frm.doc.status);
+
+    // Overdue stays in the list while it is the current value, or the field
+    // would show blank.
+    const options = (meta_df.options || "")
+        .split("\n")
+        .filter((option) => is_overdue || option !== OVERDUE_PRIORITY);
+
+    frm.set_df_property("priority", "options", options);
+    frm.set_df_property("priority", "read_only", locked ? 1 : meta_df.read_only);
+    frm.set_df_property(
+        "priority",
+        "description",
+        locked
+            ? __("Set automatically: this task is past its Expected End Date. Move the date later to change it.")
+            : meta_df.description || ""
+    );
+}
+
 function set_color_by_priority(frm) {
+    // Keep in step with the same map in task.py.
     const priority_color_map = {
+        "Overdue": "#8B0000",
         "Urgent": "#FF4D4D",
         "High": "#FFA500",
         "Medium": "#318AD8",

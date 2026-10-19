@@ -42,7 +42,6 @@ frappe.listview_settings["Task"] = {
 			"QA Approved": "green",
             "Delivered": "cyan",
             "Client Feedback": "yellow",
-			Overdue: "red",
 			Completed: "green",
 			Cancelled: "cyan",
 			Closed: "orange",

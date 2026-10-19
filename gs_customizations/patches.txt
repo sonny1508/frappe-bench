@@ -7,3 +7,4 @@
 gs_customizations.patches.add_employee_checkin_field
 gs_customizations.patches.update_task_kanban_fields
 gs_customizations.patches.add_employee_matrix_field
+gs_customizations.patches.archive_task_overdue_kanban_column

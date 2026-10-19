@@ -38,6 +38,7 @@
     // ==================== PRIORITY CONFIG ====================
 
     const PRIORITY_ORDER = {
+        "Overdue": 0,
         "Urgent": 1,
         "High": 2,
         "Medium": 3,
@@ -59,7 +60,9 @@
             label: "Priority",
             detectPatterns: ["Priority"],
             optionType: "select",
-            restricted: true
+            restricted: true,
+            // Set by the server only, once a task passes its deadline.
+            hiddenOptions: ["Overdue"]
         },
         type: {
             fieldname: "type",
@@ -213,6 +216,7 @@
             options = config.options;
         } else if (config.optionType === "select") {
             options = await loadSelectOptions(config.fieldname);
+            options = options.filter(opt => !(config.hiddenOptions || []).includes(opt.value));
         } else if (config.optionType === "link") {
             options = await loadLinkOptions(config.linkDoctype);
         }

@@ -39,7 +39,7 @@ from frappe.custom.doctype.property_setter.property_setter import make_property_
 # 		"Task",
 # 		"status",
 # 		"options",
-# 		"Open\nWorking\nQA Pending\nQA Reviewing\nQA Feedback\nQA Approved\nDelivered\nClient Feedback\nOverdue\nCompleted\nCancelled\nClosed",
+# 		"Open\nWorking\nQA Pending\nQA Reviewing\nQA Feedback\nQA Approved\nDelivered\nClient Feedback\nCompleted\nCancelled\nClosed",
 # 		"Text",
 # 	),
 	

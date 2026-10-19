@@ -591,16 +591,30 @@ def custom_task():
 				"is_system_generated": 0,
 				"label": "Utilization",
 				"read_only": 1,
-			},				
+			},
+			{
+				# The priority a task had before it went Overdue, put back when
+				# the deadline is moved later. See overdue_priority.py.
+				"fieldname": "custom_priority_before_overdue",
+				"fieldtype": "Data",
+				"insert_after": "priority",
+				"is_system_generated": 0,
+				"label": "Priority Before Overdue",
+				"hidden": 1,
+				"read_only": 1,
+				"no_copy": 1,
+				"print_hide": 1,
+			},
 		]
 	})
 
-def property_task():	
+def property_task():
+	# No Overdue status: lateness is shown by the Overdue priority instead.
 	make_property_setter(
 		"Task",
 		"status",
 		"options",
-		"Open\nWorking\nQA Pending\nQA Reviewing\nQA Feedback\nQA Approved\nDelivered\nClient Feedback\nOverdue\nCompleted\nCancelled\nClosed",
+		"Open\nWorking\nQA Pending\nQA Reviewing\nQA Feedback\nQA Approved\nDelivered\nClient Feedback\nCompleted\nCancelled\nClosed",
 		"Text",
 	),
 	make_property_setter(
@@ -614,7 +628,9 @@ def property_task():
 		"Task",
 		"priority",
 		"options",
-		"Urgent\nHigh\nMedium\nLow\nSupport",
+		# Overdue is set by the system only (overdue_priority.py); the Task form
+		# leaves it out of the dropdown.
+		"Overdue\nUrgent\nHigh\nMedium\nLow\nSupport",
 		"Text",
 	),
 	make_property_setter(

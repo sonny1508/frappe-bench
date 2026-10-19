@@ -3,6 +3,7 @@ import frappe
 from frappe import _
 
 TASK_PRIORITY_ORDER = {
+    "Overdue": 0,
     "Urgent": 1,
     "High": 2,
     "Medium": 3,
@@ -19,7 +20,6 @@ TASK_COLUMN_INDICATORS = {
     "QA Approved": "green",
     "Delivered": "cyan",
     "Client Feedback": "yellow",
-    "Overdue": "red",
     "Completed": "green",
     "Cancelled": "cyan",
     "Template": "grey",

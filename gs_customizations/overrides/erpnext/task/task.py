@@ -11,6 +11,13 @@ from frappe.model.mapper import get_mapped_doc
 
 from erpnext.projects.doctype.task.task import Task
 
+from gs_customizations.overrides.erpnext.task.overdue_priority import (
+	OVERDUE,
+	apply_overdue_priority,
+	is_past_deadline,
+	workflow_priority,
+)
+
 class CustomTask(Task):
 
 	def validate(self):
@@ -79,16 +86,41 @@ class CustomTask(Task):
 			clear(self.doctype, self.name)
 
 	def update_status(self):
-		if self.status in ("Open", "Working") and self.exp_end_date:
-			from datetime import datetime
+		"""Daily deadline check, called for every unfinished task by ERPNext's
+		set_tasks_as_overdue scheduler job.
 
-			if self.exp_end_date < datetime.now().date():
-				self.db_set("status", "Overdue", update_modified=False)
-				self.update_project()
+		ERPNext's version switched the status to Overdue. Here the status is left
+		alone: a task that has passed its deadline is saved, so that
+		apply_overdue_priority() gives it the Overdue priority (overdue_priority.py).
+
+		Saved through the full lifecycle rather than db_set so the change bumps
+		`modified` - a form left open from before is then refused on save instead
+		of quietly writing its old priority back - and shows in the Task's history.
+		"""
+		if self.priority == OVERDUE or not is_past_deadline(self.exp_end_date, self.status):
+			return
+
+		# ERPNext's job loops every task with no error handling of its own, so one
+		# task that fails to save must not stop the rest.
+		frappe.db.savepoint("overdue_priority")
+		try:
+			self.save(ignore_permissions=True)
+		except Exception:
+			frappe.db.rollback(save_point="overdue_priority")
+			frappe.log_error(
+				frappe.get_traceback(),
+				"gs_customizations: Overdue priority for Task {0} failed".format(self.name),
+			)
 
 def custom_validate(doc, method):
 	set_color_by_priority(doc)
 	validate_task_fields_permissions(doc)
+
+	# After the permission check: a priority the system sets is not a change the
+	# user made.
+	if apply_overdue_priority(doc):
+		set_color_by_priority(doc)
+
 	auto_update(doc)
 
 def auto_update(doc):
@@ -138,7 +170,10 @@ def auto_update_completed_on(doc):
 		doc.completed_on = now_datetime()
 
 def set_color_by_priority(doc):
+	# Keep in step with the same map in task.js: the form saves the task again
+	# whenever its color disagrees with this one.
 	priority_color_map = {
+		"Overdue": "#8B0000",
 		"Urgent": "#FF4D4D",
 		"High": "#FFA500",
 		"Medium": "#318AD8",
@@ -309,7 +344,9 @@ def validate_status_transition(doc):
 			title="Status Change Not Allowed"
 		)
 
-	if doc.priority == "Support":
+	priority = workflow_priority(doc)
+
+	if priority == "Support":
 		allowed_statuses = ["Open", "Working", "Completed"]
 	else:
 		allowed_statuses = ["Open", "Working", "QA Pending"]
@@ -317,7 +354,7 @@ def validate_status_transition(doc):
 	if old_status not in allowed_statuses or new_status not in allowed_statuses:
 		status_list = "', '".join(allowed_statuses)
 		frappe.throw(
-			f"For tasks with priority '{doc.priority}', you can only change status between '{status_list}'.",
+			f"For tasks with priority '{priority}', you can only change status between '{status_list}'.",
 			title="Status Change Not Allowed"
 		)
 

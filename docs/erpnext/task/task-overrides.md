@@ -6,6 +6,7 @@ Task fields server-owned.
 | File | Role |
 |---|---|
 | `task.py` | `CustomTask(Task)` + doc_event handlers + field automation |
+| `overdue_priority.py` | The Overdue priority rules — see [below](#overdue-priority) |
 | `task.js` | Form script (`doctype_js`) |
 | `task_list.js` | List/gantt settings (`doctype_list_js`) |
 | `task_permissions.py` | `permission_query_conditions` handler |
@@ -69,6 +70,7 @@ so a new row appears only on a genuine remove-then-re-add. That is what makes
 | `custom_reviewer` | `auto_set_reviewer` | Task validate |
 | `custom_utilization` | `CustomTask.update_utilization` | Task on_update |
 | `color` | `set_color_by_priority` | Task validate + on_change |
+| `priority` (Overdue only) / `custom_priority_before_overdue` | `apply_overdue_priority` | Task validate, and once a day — see [below](#overdue-priority) |
 
 ### Why these use `frappe.db.set_value(..., update_modified=False)`
 
@@ -86,7 +88,55 @@ The ToDo hooks write directly to the database rather than calling `doc.save()`:
 The cost: **no Version row**, so these changes do not appear in the Task's document
 history. `tabToDo` is the audit trail.
 
+## Overdue priority
+
+There is no Overdue **status**. A task past its deadline is marked by the
+**priority** `Overdue` instead, and its status is left alone.
+
+ERPNext's own behaviour was to switch Open/Working tasks past `exp_end_date` to
+status Overdue. That pulled the task out of its workflow stage, and
+`validate_status_transition` gave artists no way to move it on again. The status was
+dropped from the options and the Overdue Kanban column archived
+(`patches/archive_task_overdue_kanban_column.py`).
+
+The rules, for a task that is not Completed, Closed or Cancelled:
+
+| Situation | Result |
+|---|---|
+| `exp_end_date` is before today | Priority becomes Overdue. The previous priority is kept in hidden `custom_priority_before_overdue` |
+| Still late, someone changes the priority | Refused (`Priority Locked`) |
+| `exp_end_date` moved to today or later, or cleared | The kept priority comes back |
+| Overdue picked by hand on a task that isn't late | Refused (`Priority Not Allowed`) |
+
+The deadline day itself is still on time. A **finished** task is left as it is, so
+one that finished late keeps Overdue as the record of it, and its priority can be
+changed freely.
+
+All of this is `resolve_priority()`, a pure function over scalars. Two paths call it:
+
+- `custom_validate` → `apply_overdue_priority()`, on every save. It runs **after**
+  `validate_task_fields_permissions`, so a priority the system sets does not count
+  as a restricted change by an artist.
+- ERPNext's daily `set_tasks_as_overdue` job, which calls `CustomTask.update_status()`
+  for every task not Cancelled/Completed. That method now saves a task that has just
+  gone late instead of setting the status. It uses a full `save()` (bumps `modified`,
+  writes a Version row) so a stale open form is refused rather than writing the old
+  priority back, and a savepoint so one failing task does not stop the loop.
+
+`workflow_priority()` reads the kept priority while a task is Overdue, so a late
+**Support** task keeps the Open → Working → Completed workflow.
+
+The Task form (`task.js`) and the Kanban inline editor leave Overdue out of the
+dropdown, and the form locks the field while an unfinished task is Overdue. The
+server enforces both anyway. Overdue sorts first on Kanban (`TASK_PRIORITY_ORDER`
+and `PRIORITY_ORDER`).
+
 ## Landmines
+
+**The priority colour map exists twice** — `set_color_by_priority` in `task.py` and
+in `task.js` — and they must match. The form sets the colour and saves the task on
+refresh whenever the colour disagrees with its map, and the server then sets it back
+to its own, so a mismatch means an extra save every time the form is opened.
 
 **Do not hook `ToDo.on_update` to catch un-assignment.** `close_all_assignments()`
 runs inside `CustomTask.validate_status()`, at which point the Task's *stored* status
