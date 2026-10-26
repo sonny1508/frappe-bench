@@ -32,7 +32,7 @@ triggers if:
 ### `notify_task_update(doc, method)`
 
 Fires on Task save and **only queues** the notice — see
-[the 5-minute hold](#the-5-minute-hold). Queues if:
+[the 2-minute hold](#the-2-minute-hold). Queues if:
 1. Matrix integration is enabled
 2. The task is not new, and its status actually changed (compares with
    `get_doc_before_save()`). A new task has nobody assigned yet; its assignees
@@ -47,10 +47,10 @@ goes through without its notice.
 
 Runs every minute. Sends the held notices whose hold has run out — see below.
 
-## The 5-minute hold
+## The 2-minute hold
 
 A Task status change is announced only once the status has held for
-`NOTIFY_DELAY_MINUTES` (5). This is for misclicks: a card dragged into the
+`NOTIFY_DELAY_MINUTES` (2). This is for misclicks: a card dragged into the
 wrong Kanban column and straight back sends nothing.
 
 The held notices are rows of **Matrix Pending Notification**, one per task,
@@ -61,7 +61,7 @@ named after it:
 | `task` | The task |
 | `from_status` | Status before the first change in this hold. Kept when later changes restart the hold |
 | `to_status` | Latest status, for information |
-| `send_after` | Pushed back to now + 5 minutes on every further status change |
+| `send_after` | Pushed back to now + 2 minutes on every further status change |
 
 When `send_after` has passed, the minute job deletes the row, commits, then
 looks at the task **as it is now**:
@@ -73,10 +73,10 @@ looks at the task **as it is now**:
 | Deleted | Nothing sent |
 
 So only the status a task settles on is announced. Working → QA Pending → QA
-Reviewing within 5 minutes announces QA Reviewing only, which tells nobody: the
+Reviewing within 2 minutes announces QA Reviewing only, which tells nobody: the
 reviewer has already picked it up.
 
-Notices go out between 5 and 6 minutes after the last change (the job runs once
+Notices go out between 2 and 3 minutes after the last change (the job runs once
 a minute). To cancel one, delete its row in `/app/matrix-pending-notification`.
 
 Why the row is deleted and committed *before* sending: if sending then fails,

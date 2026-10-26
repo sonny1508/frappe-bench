@@ -50,8 +50,8 @@ scheduler_events = {
 Integration and Spaces → Keep Managed Spaces in Sync are ticked. The job type
 is created by `bench migrate`. See [spaces.md](spaces.md).
 
-`send_due_task_notifications` sends the Task status notices whose 5-minute hold
-has run out. See [notifications.md](notifications.md#the-5-minute-hold).
+`send_due_task_notifications` sends the Task status notices whose 2-minute hold
+has run out. See [notifications.md](notifications.md#the-2-minute-hold).
 
 ## Never rename or remove a hooked function in one step
 

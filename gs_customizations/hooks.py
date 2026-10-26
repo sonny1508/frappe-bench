@@ -249,7 +249,7 @@ doc_events = {
         "on_update": [
             # "gs_customizations.synology.synology.notify_task_update",
             # Only queues the notice; send_due_task_notifications sends it once
-            # the status has held for 5 minutes.
+            # the status has held for 2 minutes.
             "gs_customizations.matrix.notifications.notify_task_update"
         ],
     },

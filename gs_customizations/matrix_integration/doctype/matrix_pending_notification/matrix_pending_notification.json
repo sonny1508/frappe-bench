@@ -2,7 +2,7 @@
  "actions": [],
  "autoname": "field:task",
  "creation": "2026-10-26 00:00:00.000000",
- "description": "A Task status change waiting to be announced on Matrix. It is sent once the status has held for 5 minutes, and dropped if the task is back where it started. Delete a row to cancel its notice.",
+ "description": "A Task status change waiting to be announced on Matrix. It is sent once the status has held for 2 minutes, and dropped if the task is back where it started. Delete a row to cancel its notice.",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -44,7 +44,7 @@
    "label": "Send After",
    "read_only": 1,
    "search_index": 1,
-   "description": "Pushed back to 5 minutes after every further status change."
+   "description": "Pushed back to 2 minutes after every further status change."
   }
  ],
  "in_create": 1,

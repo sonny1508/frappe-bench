@@ -86,10 +86,10 @@ gs_customizations/
       matrix_room_member/              # One row per person per room
       matrix_managed_space/            # Child table — managed root spaces
       matrix_space_steward/            # Child table — steward list
-      matrix_pending_notification/     # Task status notices waiting out their 5-minute hold
+      matrix_pending_notification/     # Task status notices waiting out their 2-minute hold
 ```
 
-See `notifications.md` for why Task status notices wait 5 minutes before they
+See `notifications.md` for why Task status notices wait 2 minutes before they
 are sent.
 
 See `spaces.md` for managed spaces: keeping stewards in every space and room

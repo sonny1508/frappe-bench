@@ -20,7 +20,7 @@ from gs_customizations.matrix.bot import get_matrix_user_id, send_server_notice
 
 # A status change is announced only once it has held this long, so a card
 # dragged into the wrong column and straight back sends nothing.
-NOTIFY_DELAY_MINUTES = 5
+NOTIFY_DELAY_MINUTES = 2
 
 PENDING_DOCTYPE = "Matrix Pending Notification"
 
