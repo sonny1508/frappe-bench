@@ -248,6 +248,8 @@ doc_events = {
         "on_change": "gs_customizations.overrides.erpnext.task.task.on_change",
         "on_update": [
             # "gs_customizations.synology.synology.notify_task_update",
+            # Only queues the notice; send_due_task_notifications sends it once
+            # the status has held for 5 minutes.
             "gs_customizations.matrix.notifications.notify_task_update"
         ],
     },
@@ -303,6 +305,10 @@ scheduler_events = {
 		# Matrix space stewards — see docs/matrix_integration/spaces.md
 		"*/10 * * * *": [
 			"gs_customizations.matrix.spaces.scheduled_sync",
+		],
+		# Held Task status notices — see docs/matrix_integration/notifications.md
+		"* * * * *": [
+			"gs_customizations.matrix.notifications.send_due_task_notifications",
 		],
 	},
     # "cron": {

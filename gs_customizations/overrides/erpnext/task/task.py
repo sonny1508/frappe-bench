@@ -557,8 +557,7 @@ def set_exp_start_date_from_assignment(doc, method=None):
 		insert transaction - validate_status, update_depends_on,
 		validate_task_fields_permissions, then on_update -> update_nsm_model,
 		check_recursion, reschedule_dependent_tasks, update_project (which re-costs
-		the whole Project) and notify_task_update (a Matrix HTTP call per
-		assignment).
+		the whole Project) and notify_task_update.
 	  * update_modified=False keeps `modified` still. The assigning manager has the
 		Task form open - assign_to.js re-renders the sidebar avatars but never
 		reloads the doc - so bumping `modified` would hand them "Document has been

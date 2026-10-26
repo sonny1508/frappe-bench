@@ -78,7 +78,7 @@ The ToDo hooks write directly to the database rather than calling `doc.save()`:
 
 - `doc.save()` from inside a ToDo insert would re-run the whole Task lifecycle —
   `validate_task_fields_permissions` (which throws for non-managers), `update_project`
-  (re-costs the entire Project), the nested-set rebuild, and a Matrix HTTP call.
+  (re-costs the entire Project), the nested-set rebuild, and the Matrix notice hook.
 - `update_modified=False` keeps `modified` still. The assigning manager has the Task
   form open — the desk sidebar re-renders its avatars but **never reloads the doc** —
   so bumping `modified` would hand them *"Document has been modified"* on their next save.

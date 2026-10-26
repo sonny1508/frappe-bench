@@ -3,31 +3,27 @@
 `gs_customizations/matrix/notifications.py`
 
 Mirrors the Synology notification logic (`synology/synology.py`) but delivers
-messages via Matrix server notices. Both systems fire side-by-side through
-list-style hooks in `hooks.py`.
+messages via Matrix server notices. The Synology hooks are commented out in
+`hooks.py`; only Matrix sends.
 
 ## Hooks
 
-Wired in `hooks.py` → `doc_events`:
+Wired in `hooks.py`:
 
 ```python
-"ToDo": {
-    "after_insert": [
-        "gs_customizations.synology.synology.notify_todo_insert",     # Synology
-        "gs_customizations.matrix.notifications.notify_todo_insert"   # Matrix
-    ]
-},
-"Task": {
-    "on_update": [
-        "gs_customizations.synology.synology.notify_task_update",     # Synology
-        "gs_customizations.matrix.notifications.notify_task_update"   # Matrix
-    ],
-},
+doc_events = {
+    "ToDo": {"after_insert": [..., "gs_customizations.matrix.notifications.notify_todo_insert"]},
+    "Task": {"on_update": ["gs_customizations.matrix.notifications.notify_task_update"]},
+}
+scheduler_events = {
+    "cron": {"* * * * *": ["gs_customizations.matrix.notifications.send_due_task_notifications"]},
+}
 ```
 
 ### `notify_todo_insert(doc, method)`
 
-Fires when a ToDo is created (task assignment). Only triggers if:
+Fires when a ToDo is created (task assignment) and sends straight away. Only
+triggers if:
 1. The ToDo references a Task (`reference_type == "Task"`)
 2. The ToDo status is Open
 3. Matrix integration is enabled (global check)
@@ -35,10 +31,77 @@ Fires when a ToDo is created (task assignment). Only triggers if:
 
 ### `notify_task_update(doc, method)`
 
-Fires on Task save. Only triggers if:
+Fires on Task save and **only queues** the notice — see
+[the 5-minute hold](#the-5-minute-hold). Queues if:
 1. Matrix integration is enabled
-2. The task's status actually changed (compares with `get_doc_before_save()`)
-3. The new status exists in `STATUS_NOTIFICATIONS`
+2. The task is not new, and its status actually changed (compares with
+   `get_doc_before_save()`). A new task has nobody assigned yet; its assignees
+   hear from `notify_todo_insert`.
+3. A notice for this task is already held, or the new status notifies someone
+   in `STATUS_NOTIFICATIONS`
+
+It never raises: a failure is written to the Error Log and the status change
+goes through without its notice.
+
+### `send_due_task_notifications()`
+
+Runs every minute. Sends the held notices whose hold has run out — see below.
+
+## The 5-minute hold
+
+A Task status change is announced only once the status has held for
+`NOTIFY_DELAY_MINUTES` (5). This is for misclicks: a card dragged into the
+wrong Kanban column and straight back sends nothing.
+
+The held notices are rows of **Matrix Pending Notification**, one per task,
+named after it:
+
+| Field | Meaning |
+|---|---|
+| `task` | The task |
+| `from_status` | Status before the first change in this hold. Kept when later changes restart the hold |
+| `to_status` | Latest status, for information |
+| `send_after` | Pushed back to now + 5 minutes on every further status change |
+
+When `send_after` has passed, the minute job deletes the row, commits, then
+looks at the task **as it is now**:
+
+| Task now | Result |
+|---|---|
+| Back to `from_status` | Nothing sent: a misclick undone |
+| Any other status | Notice for the current status, to whoever `STATUS_NOTIFICATIONS` names for it |
+| Deleted | Nothing sent |
+
+So only the status a task settles on is announced. Working → QA Pending → QA
+Reviewing within 5 minutes announces QA Reviewing only, which tells nobody: the
+reviewer has already picked it up.
+
+Notices go out between 5 and 6 minutes after the last change (the job runs once
+a minute). To cancel one, delete its row in `/app/matrix-pending-notification`.
+
+Why the row is deleted and committed *before* sending: if sending then fails,
+that one notice is lost (and logged), as an inline send always was, instead of
+being repeated every minute.
+
+The row is written in the Task save's own transaction, so a save that fails
+leaves no notice behind. When notices were sent from inside the save, a save
+that failed afterwards (e.g. the Kanban Board save) had already sent one.
+
+**Before `bench migrate`** has created the table, `notify_task_update` sends
+straight away as it used to, so updating the code alone loses no notices.
+
+### Performance, measured 2026-10-26
+
+Holding the notice was not where the 5–10 s Kanban wait came from. Measured on
+this site:
+
+- The server side of a Kanban drag (`update_order_for_single_card`) takes
+  75–115 ms without the Matrix send.
+- A Synapse round trip from Frappe takes about 35 ms (the hostname resolves to
+  the LAN).
+- For real QA Feedback / QA Approved / Client Feedback moves that day, Synapse
+  stored the assignee's notice 0.07–0.21 s after the Task save started (read
+  from `origin_server_ts` in the notice rooms vs `tabTask.modified`).
 
 ## Status notification config
 
@@ -103,7 +166,8 @@ rendering.
 `_send_to_recipients()` iterates usernames, builds Matrix user IDs via
 `bot.get_matrix_user_id()`, and calls `bot.send_server_notice()` for each.
 Failures are caught per-user and logged — one user's error doesn't block
-others.
+others. For Task status changes this runs in the minute job, through
+`_announce_task_status()`, not inside the save.
 
 ## Differences from Synology
 

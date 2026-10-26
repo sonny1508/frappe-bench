@@ -20,6 +20,7 @@ doc_events = {
     "Task": {
         "on_update": [
             # "gs_customizations.synology.synology.notify_task_update",
+            # Only queues the notice — see notifications.md
             "gs_customizations.matrix.notifications.notify_task_update"
         ],
     },
@@ -40,6 +41,7 @@ automation, and `notify_todo_insert` does an unguarded
 scheduler_events = {
     "cron": {
         "*/10 * * * *": ["gs_customizations.matrix.spaces.scheduled_sync"],
+        "* * * * *": ["gs_customizations.matrix.notifications.send_due_task_notifications"],
     },
 }
 ```
@@ -47,6 +49,22 @@ scheduler_events = {
 `scheduled_sync` returns immediately unless both Matrix Settings → Enable Matrix
 Integration and Spaces → Keep Managed Spaces in Sync are ticked. The job type
 is created by `bench migrate`. See [spaces.md](spaces.md).
+
+`send_due_task_notifications` sends the Task status notices whose 5-minute hold
+has run out. See [notifications.md](notifications.md#the-5-minute-hold).
+
+## Never rename or remove a hooked function in one step
+
+Frappe caches the hooks in Redis, and the cache outlives `bench restart`; only
+`bench migrate` or `bench clear-cache` refreshes it. Python code, on the other
+hand, is read from disk by every process that starts: a gunicorn worker that
+replaces one after `--max-requests`, every background job, `bench console`. So
+as soon as a file is saved on this bench, those processes run the new code
+against the old hook list. If a hooked function has been renamed, every Task
+save in them fails with `AttributeError`, and no restart fixes it.
+
+Keep the old name working: leave the function where it is and change what it
+does, or keep an alias until the cache has been cleared.
 
 ## How to disable Synology
 
@@ -78,7 +96,8 @@ Each hook function has its own early-return checks:
 2. **Status relevance**: Only fires for statuses listed in
    `STATUS_NOTIFICATIONS`
 3. **Status change**: `notify_task_update` skips if the status hasn't
-   actually changed (compares with `get_doc_before_save()`)
+   actually changed (compares with `get_doc_before_save()`), and the sender
+   skips a task that is back to the status it had before the change
 4. **Per-employee**: `_is_matrix_enabled_for_user()` checks the employee's
    `custom_enable_matrix_notifications` flag
 5. **Error isolation**: Each recipient is wrapped in try/except — one
