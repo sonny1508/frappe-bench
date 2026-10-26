@@ -73,6 +73,7 @@ site_config.
 - [Maintenance scripts](maintenance-scripts.md) — `bench execute` one-offs and how to write one
 - [Timesheet overrides](erpnext/timesheet/timesheet_overrides.md), [Timesheet check-in](erpnext/timesheet/timesheet_checkin.md)
 - [Matrix integration](matrix_integration/overview.md) — 8 documents, start with the overview
+- [Task Kanban board](frappe/kanban.md) — priority-sorted columns, drops without a redraw, the board's server calls
 
 ## Not documented yet
 
@@ -82,5 +83,4 @@ Worth writing when someone next works in these areas:
 - `overrides/hrms/leave_allocation/`, `leave_policy_assignment/`
 - `overrides/hrms/report/monthly_attendance_sheet/`, `leave_ledger/`, `employee_leave_balance/`
 - `overrides/hrms/attendance/`, `employee_checkin/`, `shift_type/`
-- `overrides/frappe/kanban_board/` and `public/js/kanban/`
 - `utils/network_access.py` (route blocking / restricted network)

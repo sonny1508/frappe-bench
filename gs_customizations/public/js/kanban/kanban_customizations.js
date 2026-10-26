@@ -83,6 +83,14 @@
 
     const optionsCache = {};
 
+    const DROP_METHOD = "frappe.desk.doctype.kanban_board.kanban_board.update_order_for_single_card";
+    const OPEN_METHOD = "frappe.desk.doctype.kanban_board.kanban_board.update_order";
+
+    // The board's own card and column objects. Frappe's store keeps them
+    // private; holding them lets a drop be recorded without redrawing the board.
+    const cardObjects = new Map();
+    const columnObjects = new Map();
+
     // ==================== UTILITIES ====================
 
     function debounce(fn, delay) {
@@ -151,6 +159,13 @@
         state.originalFrappeCall = frappe.call;
 
         frappe.call = function(opts) {
+            if (opts.method === DROP_METHOD && isKanbanView()) {
+                return saveDroppedCard(opts);
+            }
+            if (opts.method === OPEN_METHOD && isKanbanView()) {
+                opts.callback = skipUnchangedOrder(opts.callback);
+            }
+
             const isKanbanUpdate = opts.method && opts.method.includes('kanban');
 
             if (isKanbanUpdate && isKanbanView()) {
@@ -178,6 +193,95 @@
             frappe.call = state.originalFrappeCall;
             state.originalFrappeCall = null;
         }
+    }
+
+    // ==================== DROP WITHOUT REDRAW ====================
+
+    // Frappe freezes the screen on a drop and, once the server answers, redraws
+    // every column and card on the board. Here the card stays where it was
+    // dropped and is saved in the background; when the server agrees, only that
+    // card and its new column are updated. If the save fails, Frappe's own
+    // handler puts the board back and the error is shown, as before.
+    function saveDroppedCard(opts) {
+        // Frappe froze the screen just before calling; let the person carry on.
+        frappe.dom.unfreeze();
+
+        const { docname, to_colname } = opts.args;
+        findCard(docname).css("opacity", 0.6);
+
+        return state.originalFrappeCall.call(frappe, Object.assign({}, opts, {
+            callback: function(r) {
+                if (r.exc) {
+                    cur_list?.refresh();
+                    return;
+                }
+                settleDroppedCard(docname, to_colname, r.message);
+            }
+        }));
+    }
+
+    function settleDroppedCard(docname, colname, board) {
+        // What Frappe's handler records, minus the redraw: the card's column,
+        // and the columns' order (re-sorted by priority on the server).
+        recordCardColumn(docname, colname);
+        (board?.columns || []).forEach(col => {
+            const column = columnObjects.get(col.column_name);
+            if (column) column.order = col.order;
+        });
+
+        const $card = findCard(docname).css("opacity", "");
+        const $column = $(`.kanban-column[data-column-value="${CSS.escape(colname)}"]`);
+        const $cards = $column.find(".kanban-cards");
+        if (!$card.length || !$cards.length) return;
+
+        // A failed drop of another card, meanwhile, redraws the board from the
+        // old state and so puts this card back in its old column.
+        if (!$.contains($cards[0], $card[0])) {
+            $card.appendTo($cards);
+        }
+
+        const fieldname = cur_list?.board?.field_name || "status";
+        const $field = $card.find(`[data-fieldname="${fieldname}"]`);
+        if ($field.length) {
+            $field.attr("data-current-value", colname);
+            updateFieldDisplay($field, "status", colname);
+        }
+
+        reorderColumnByPriority($column, $card[0]);
+    }
+
+    function recordCardColumn(docname, colname) {
+        const card = cardObjects.get(docname);
+        if (!card) return;
+        // Changing a card in place does not set off Frappe's store watchers.
+        card.column = colname;
+        if (card.doc) card.doc[cur_list?.board?.field_name || "status"] = colname;
+    }
+
+    function findCard(docname) {
+        const $wrapper = getKanbanWrapper() || $(document);
+        return $wrapper.find(`.kanban-card-wrapper[data-name="${CSS.escape(encodeURIComponent(docname))}"]`);
+    }
+
+    // Opening a board, Frappe asks the server for the column order and then
+    // draws the whole board a second time with it. Skip that when the order
+    // came back as it already is.
+    function skipUnchangedOrder(callback) {
+        return function(r) {
+            const [board, updatedCards] = r.message || [];
+            const current = cur_list?.board?.columns || [];
+            const unchanged = !!board
+                && !(updatedCards || []).length
+                && board.columns.length === current.length
+                && board.columns.every(col => {
+                    const shown = current.find(c => c.column_name === col.column_name);
+                    return shown && shown.order === col.order && shown.status === col.status;
+                });
+
+            if (!unchanged && callback) {
+                return callback.apply(this, arguments);
+            }
+        };
     }
 
     // ==================== PERMISSIONS ====================
@@ -320,11 +424,25 @@
             // Mark as overridden BEFORE doing the override to prevent races
             state.kanbanCardOverridden = true;
 
+            const makeColumn = frappe.views.KanbanBoardColumn;
+            if (typeof makeColumn === "function") {
+                frappe.views.KanbanBoardColumn = function(column) {
+                    columnObjects.set(column.title, column);
+                    return makeColumn.apply(this, arguments);
+                };
+            }
+
             frappe.views.KanbanBoardCard = function(card, wrapper) {
                 var self = {};
 
                 function init() {
                     if (!card) return;
+                    // Every column Frappe draws registers a store watcher that
+                    // re-renders its cards and is never released (fixed upstream
+                    // after 15.91), so replaced columns keep drawing into their
+                    // removed DOM on every refresh. Skip those.
+                    if (!wrapper?.[0]?.isConnected) return;
+                    cardObjects.set(card.name, card);
                     make_dom();
                     render_card_meta();
                 }
@@ -341,6 +459,8 @@
                     };
 
                     self.$card = $(frappe.render_template("kanban_card", opts)).appendTo(wrapper);
+                    // Read by reorderColumnByPriority, as priority is not shown on the card.
+                    self.$card.attr("data-priority", card.doc?.priority || "");
 
                     // Bake in the collapse toggle button (no per-card listener needed; delegated)
                     self.$card.find(".kanban-card").append(
@@ -550,10 +670,12 @@
                 }, 3);
 
                 if (config.fieldname === "status") {
+                    recordCardColumn(docname, newValue);
                     moveCardToColumn($field.closest(".kanban-card-wrapper"), newValue);
                 }
 
                 if (config.fieldname === "priority") {
+                    $field.closest(".kanban-card-wrapper").attr("data-priority", newValue);
                     reorderColumnByPriority($field.closest(".kanban-column"));
                 }
             },
@@ -622,11 +744,14 @@
         const cards = $cardsContainer.find(".kanban-card-wrapper").toArray();
         if (cards.length < 2) return;
 
-        // Pre-extract priorities
+        // Pre-extract priorities: from the priority field when the board shows
+        // it (it is the live value after an inline edit), else from the card.
         const cardPriorities = new Map();
         cards.forEach(card => {
             const $priorityField = $(card).find('[data-fieldname="priority"]');
-            const priority = $priorityField.attr('data-current-value') || '';
+            const priority = ($priorityField.length
+                ? $priorityField.attr('data-current-value')
+                : card.dataset.priority) || '';
             cardPriorities.set(card, PRIORITY_ORDER[priority] ?? 99);
         });
 
@@ -680,8 +805,14 @@
 
         // filters.push([TARGET_DOCTYPE, "status", "!=", "Closed"]);
 
+        // Clearing and re-adding reloads the whole board, so leave it alone when
+        // it already shows exactly the board's filters.
+        const wanted = filters.map(f => [f[0], f[1], f[2], f[3]]);
+        const key = list => list.map(f => JSON.stringify(f.slice(0, 4))).sort().join();
+        if (key(cur_list.filter_area.get()) === key(wanted)) return;
+
         cur_list.filter_area.clear();
-        cur_list.filter_area.add(filters.map(f => [f[0], f[1], f[2], f[3]]));
+        cur_list.filter_area.add(wanted);
     }
 
     // ==================== ROUTE CHANGE HANDLING ====================

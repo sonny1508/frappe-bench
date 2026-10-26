@@ -36,41 +36,46 @@ def set_default_indicators(doc, method=None):
             column.indicator = TASK_COLUMN_INDICATORS[column.column_name]
 
 
-def get_order_for_column(board, colname):
-    """Override: Get card order sorted by priority for Task doctype"""
-    filters = [[board.reference_doctype, board.field_name, "=", colname]]
-    
-    if board.filters:
-        filters.append(frappe.parse_json(board.filters)[0])
-    
-    if board.reference_doctype == "Task":
-        # Fetch with priority and modified fields
-        tasks = frappe.get_list(
-            board.reference_doctype,
-            filters=filters,
-            fields=["name", "priority"]
-        )
-        
-        # Sort by priority first, then by modified ascending (oldest first within same priority)
-        # tasks.sort(key=lambda x: (
-        #     TASK_PRIORITY_ORDER.get(x.get("priority"), 99),
-        #     x.get("modified")
-        # ))
+def get_task_column_orders(board, colnames):
+    """Card order of each Task column, by priority, from a single query.
 
-        tasks.sort(key=lambda x:
-            TASK_PRIORITY_ORDER.get(x.get("priority"), 99)
-        )
-        
-        return frappe.as_json([t.name for t in tasks])
-    else:
-        return frappe.as_json(
-            frappe.get_list(board.reference_doctype, filters=filters, pluck="name")
-        )
+    Within a priority, cards keep get_list's order (most recently modified
+    first), so a card that has just been moved goes to the top of its group.
+    """
+    filters = [[board.reference_doctype, board.field_name, "in", colnames]]
+
+    # Only the board's first filter, usually its project. "Status is not
+    # Closed" is left out, so a Closed column still gets an order.
+    if board.filters and (board_filters := frappe.parse_json(board.filters)):
+        filters.append(board_filters[0])
+
+    tasks = frappe.get_list(
+        board.reference_doctype,
+        filters=filters,
+        fields=["name", "priority", board.field_name],
+    )
+
+    by_column = {colname: [] for colname in colnames}
+    for task in tasks:
+        by_column[task.get(board.field_name)].append(task)
+
+    return {
+        colname: frappe.as_json([
+            t.name for t in sorted(rows, key=lambda t: TASK_PRIORITY_ORDER.get(t.priority, 99))
+        ])
+        for colname, rows in by_column.items()
+    }
 
 
 @frappe.whitelist()
 def update_order(board_name, order):
-    """Override: Save order but re-sort by priority for Task"""
+    """Override: called by the board every time it opens, with the card order on screen.
+
+    For Task it never moves a card and never takes the order on screen: each
+    column is re-sorted by priority, all from one query, and the board is only
+    saved when an order actually changed. Opening a board used to cost a query
+    per card, a query per column and a board save.
+    """
     board = frappe.get_doc("Kanban Board", board_name)
     doctype = board.reference_doctype
     fieldname = board.field_name
@@ -80,22 +85,40 @@ def update_order(board_name, order):
     if not frappe.has_permission(doctype, "write"):
         return board, updated_cards
 
+    if doctype == "Task":
+        # The screen was drawn from the database a moment ago, so a card in
+        # the "wrong" column means someone moved it since. Moving it back would
+        # undo their change.
+        orders = get_task_column_orders(board, list(order_dict))
+        changed = False
+        for column in board.columns:
+            new_order = orders.get(column.column_name)
+            if new_order is not None and column.order != new_order:
+                column.order = new_order
+                changed = True
+
+        return (board.save(ignore_permissions=True) if changed else board), updated_cards
+
+    cards_on_screen = [card for cards in order_dict.values() for card in cards]
+    current = dict(
+        frappe.get_all(
+            doctype,
+            filters={"name": ["in", cards_on_screen]},
+            fields=["name", fieldname],
+            as_list=True,
+        )
+    ) if cards_on_screen else {}
+
     for col_name, cards in order_dict.items():
         # Update card's column field if changed
         for card in cards:
-            column = frappe.get_value(doctype, {"name": card}, fieldname)
-            if column != col_name:
+            if current.get(card) != col_name:
                 frappe.set_value(doctype, card, fieldname, col_name)
                 updated_cards.append(dict(name=card, column=col_name))
 
-        # Get the column and set order
         for column in board.columns:
             if column.column_name == col_name:
-                if doctype == "Task":
-                    # Force priority sorting instead of drag-drop order
-                    column.order = get_order_for_column(board, col_name)
-                else:
-                    column.order = json.dumps(cards)
+                column.order = json.dumps(cards)
 
     return board.save(ignore_permissions=True), updated_cards
 
@@ -114,9 +137,10 @@ def update_order_for_single_card(board_name, docname, from_colname, to_colname, 
 
     if doctype == "Task":
         # Re-sort both columns by priority
+        orders = get_task_column_orders(board, list({from_colname, to_colname}))
         for column in board.columns:
-            if column.column_name in [from_colname, to_colname]:
-                column.order = get_order_for_column(board, column.column_name)
+            if column.column_name in orders:
+                column.order = orders[column.column_name]
     else:
         # Original behavior
         old_index = frappe.parse_json(old_index)
@@ -148,9 +172,10 @@ def add_card(board_name, docname, colname):
 
     if doctype == "Task":
         # Re-sort the column by priority
+        order = get_task_column_orders(board, [colname])[colname]
         for column in board.columns:
             if column.column_name == colname:
-                column.order = get_order_for_column(board, colname)
+                column.order = order
     else:
         # Original behavior
         col_order, col_idx = get_kanban_column_order_and_index(board, colname)
@@ -177,8 +202,9 @@ def resort_all_task_kanban_boards():
     
     for b in boards:
         board = frappe.get_doc("Kanban Board", b.name)
+        orders = get_task_column_orders(board, [c.column_name for c in board.columns])
         for column in board.columns:
-            column.order = get_order_for_column(board, column.column_name)
+            column.order = orders[column.column_name]
         board.save(ignore_permissions=True)
     
     frappe.db.commit()
