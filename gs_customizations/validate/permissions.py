@@ -13,6 +13,25 @@ def is_manager(user=None):
     user_roles = set(frappe.get_roles(user or frappe.session.user))
     return bool(user_roles & MANAGER_ROLES)
 
+def validate_leave_access(employee, leave_application=None):
+    """Allow an employee's leave numbers only to them, their approver, anyone who can read the
+    Employee, or anyone who can read this Leave Application of theirs. Same rule as newer HRMS,
+    which our leave overrides replace and so would not otherwise get."""
+    from hrms.hr.doctype.leave_application.leave_application import get_leave_approver
+
+    employee_user = frappe.db.get_value("Employee", employee, "user_id")
+
+    if (
+        frappe.session.user not in (employee_user, get_leave_approver(employee))
+        and not frappe.has_permission("Employee", "read", employee)
+        and not (
+            leave_application
+            and frappe.db.get_value("Leave Application", leave_application, "employee") == employee
+            and frappe.has_permission("Leave Application", "read", leave_application)
+        )
+    ):
+        frappe.throw("Not permitted", frappe.PermissionError)
+
 def has_project_permission(doc, ptype=None, user=None):
     """
     Block all permission types (read, write, create, delete) from restricted network.

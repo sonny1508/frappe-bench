@@ -73,7 +73,7 @@ app_include_js = [
     "/assets/gs_customizations/js/kanban/kanban_optimizations.js?v=03",
     "/assets/gs_customizations/js/kanban/kanban_util.js?v=04",
 
-    "/assets/gs_customizations/js/list_view_customizations.js?v=02",
+    "/assets/gs_customizations/js/list_view_customizations.js?v=03",
 
     "/assets/gs_customizations/js/erpnext/task/task.js?v=02",
     "/assets/gs_customizations/js/hrms/monthly_attendance_sheet/monthly_attendance_sheet.js?v=02",

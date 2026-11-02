@@ -2,6 +2,8 @@ import json
 import frappe
 from frappe import _
 
+from gs_customizations.validate.permissions import is_manager
+
 TASK_PRIORITY_ORDER = {
     "Overdue": 0,
     "Urgent": 1,
@@ -99,6 +101,8 @@ def update_order(board_name, order):
     card, a query per column and a board save.
     """
     board = frappe.get_doc("Kanban Board", board_name)
+    # Read on the board plus write on the cards, as upstream: write on the board is owner-only.
+    board.check_permission("read")
     doctype = board.reference_doctype
     fieldname = board.field_name
     order_dict = json.loads(order)
@@ -142,6 +146,7 @@ def update_order(board_name, order):
 def update_order_for_single_card(board_name, docname, from_colname, to_colname, old_index, new_index):
     """Override: Handle single card move but maintain priority order for Task"""
     board = frappe.get_doc("Kanban Board", board_name)
+    board.check_permission("read")
     doctype = board.reference_doctype
     fieldname = board.field_name
 
@@ -179,6 +184,7 @@ def update_order_for_single_card(board_name, docname, from_colname, to_colname, 
 def add_card(board_name, docname, colname):
     """Override: Add card and maintain priority order for Task"""
     board = frappe.get_doc("Kanban Board", board_name)
+    board.check_permission("read")
     doctype = board.reference_doctype
 
     frappe.has_permission(doctype, "write", throw=True)
@@ -209,6 +215,9 @@ def get_kanban_column_order_and_index(board, colname):
 @frappe.whitelist()
 def resort_all_task_kanban_boards():
     """Utility: Re-sort all existing Task Kanban boards by priority"""
+    if not is_manager():
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
     boards = frappe.get_all("Kanban Board", filters={"reference_doctype": "Task"})
     
     for b in boards:

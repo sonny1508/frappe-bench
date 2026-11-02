@@ -255,6 +255,8 @@ def expire_allocation(allocation, expiry_date=None):
 		# Convert from SQL result (has 'transaction_name' instead of 'name')
 		allocation = frappe.get_doc("Leave Allocation", allocation.get("transaction_name") or allocation.get("name"))
 
+	frappe.has_permission("Leave Allocation", "write", allocation.name, throw=True)
+
 	leaves = get_remaining_leaves(allocation)
 	expiry_date = expiry_date if expiry_date else allocation.to_date
 

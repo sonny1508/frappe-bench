@@ -36,6 +36,7 @@ from hrms.hr.doctype.leave_application.leave_application import (
 	is_lwp,
 )
 from gs_customizations.overrides.hrms.leave_ledger_entry.leave_ledger_entry import create_leave_ledger_entry
+from gs_customizations.validate.permissions import validate_leave_access
 from hrms.hr.utils import (
 	get_holiday_dates_for_employee,
 	get_leave_period,
@@ -278,6 +279,7 @@ class CustomLeaveApplication(LeaveApplication):
 					self.to_date,
 					consider_all_leaves_in_the_allocation_period=True,
 					for_consumption=True,
+					leave_application=None if self.is_new() else self.name,
 				)
 				leave_balance_for_consumption = flt(
 					leave_balance.get("leave_balance_for_consumption")
@@ -596,7 +598,9 @@ def get_amount_of_leave_time(
 
 
 @frappe.whitelist()
-def get_leave_details(employee, date, for_salary_slip=False):
+def get_leave_details(employee, date, for_salary_slip=False, leave_application=None):
+	validate_leave_access(employee, leave_application)
+
 	allocation_records = get_leave_allocation_records(employee, date)
 
 	leave_allocation = {}
@@ -610,6 +614,7 @@ def get_leave_details(employee, date, for_salary_slip=False):
 			date,
 			to_date=to_date,
 			consider_all_leaves_in_the_allocation_period=False if for_salary_slip else True,
+			leave_application=leave_application,
 		)
 
 		leaves_taken = get_leaves_for_period(employee, d, allocation.from_date, to_date) * -1
@@ -659,6 +664,7 @@ def get_leave_balance_on(
 	to_date: datetime.date | None = None,
 	consider_all_leaves_in_the_allocation_period: bool = False,
 	for_consumption: bool = False,
+	leave_application: str | None = None,
 ):
 	"""
 	Returns leave balance till date
@@ -672,7 +678,10 @@ def get_leave_balance_on(
 			in this case leave_balance = 10 but leave_balance_for_consumption = 1
 			if True, returns a dict eg: {'leave_balance': 10, 'leave_balance_for_consumption': 1}
 			else, returns leave_balance (in this case 10)
+	:param leave_application: lets someone who can read this application, but not the Employee, see the balance
 	"""
+
+	validate_leave_access(employee, leave_application)
 
 	if not to_date:
 		to_date = nowdate()
