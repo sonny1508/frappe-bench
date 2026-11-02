@@ -9,6 +9,7 @@
  * - docfield_map cached per card (not per field).
  * - Field options loaded lazily on first dropdown open.
  * - Toggle/expand/inline-edit/assign clicks are delegated.
+ * - A refresh redraws only the cards, only if the data changed, never mid-drag.
  */
 
 (function() {
@@ -29,6 +30,8 @@
         blockBoardSwitch: false,
         originalFrappeCall: null,
         boardFieldsNormalized: null, // Board name for which fields were already normalized
+        renderPatched: false,
+        shownBoard: null, // The list view whose board Frappe's store currently holds
     };
 
     // Cached icon HTML (avoids re-rendering SVG per card)
@@ -81,6 +84,8 @@
         }
     };
 
+    const CARD_FIELDS = ["status", "type", "custom_utilization"];
+
     const optionsCache = {};
 
     const DROP_METHOD = "frappe.desk.doctype.kanban_board.kanban_board.update_order_for_single_card";
@@ -91,6 +96,14 @@
     const cardObjects = new Map();
     const columnObjects = new Map();
 
+    // Cards just moved. Board data fetched before the save still has them in
+    // their old column, and a redraw from it would move them back.
+    const recentMoves = new Map();
+    const RECENT_MOVE_MS = 30 * 1000;
+
+    // Work held back until the card in hand has been dropped.
+    const afterDrag = [];
+
     // ==================== UTILITIES ====================
 
     function debounce(fn, delay) {
@@ -99,6 +112,18 @@
             clearTimeout(timeoutId);
             timeoutId = setTimeout(() => fn.apply(this, args), delay);
         };
+    }
+
+    function isDragging() {
+        return !!window.Sortable?.dragged;
+    }
+
+    function runAfterDrag() {
+        // Sortable ends the drag on this same event, and queues the drop's own
+        // work while doing so, so look once it has finished.
+        setTimeout(() => {
+            if (!isDragging()) afterDrag.splice(0).forEach(fn => fn());
+        }, 0);
     }
 
     function isKanbanView() {
@@ -163,7 +188,7 @@
                 return saveDroppedCard(opts);
             }
             if (opts.method === OPEN_METHOD && isKanbanView()) {
-                opts.callback = skipUnchangedOrder(opts.callback);
+                return saveOpeningOrder(opts);
             }
 
             const isKanbanUpdate = opts.method && opts.method.includes('kanban');
@@ -200,24 +225,44 @@
     // Frappe freezes the screen on a drop and, once the server answers, redraws
     // every column and card on the board. Here the card stays where it was
     // dropped and is saved in the background; when the server agrees, only that
-    // card and its new column are updated. If the save fails, Frappe's own
-    // handler puts the board back and the error is shown, as before.
+    // card and its new column are updated. If the save fails, the card goes back
+    // to the column it came from and the error is shown, as before.
     function saveDroppedCard(opts) {
         // Frappe froze the screen just before calling; let the person carry on.
         frappe.dom.unfreeze();
 
-        const { docname, to_colname } = opts.args;
-        findCard(docname).css("opacity", 0.6);
+        const { docname, from_colname, to_colname } = opts.args;
+        // Returned in place of the request, so that Frappe's failure handler,
+        // which redraws the whole board, never runs.
+        const handled = $.Deferred().resolve().promise();
 
-        return state.originalFrappeCall.call(frappe, Object.assign({}, opts, {
+        // Columns are sorted by priority, so there is nothing to save.
+        if (from_colname === to_colname) {
+            reorderColumnByPriority(findColumn(to_colname));
+            return handled;
+        }
+
+        recentMoves.set(docname, { column: to_colname, saving: true });
+        findCard(docname).addClass("kanban-card-saving");
+
+        if (!frappe.is_online()) {
+            // frappe.call only warns about the connection, and never answers.
+            state.originalFrappeCall.call(frappe, opts);
+            restoreDroppedCard(docname, from_colname);
+            return handled;
+        }
+
+        state.originalFrappeCall.call(frappe, Object.assign({}, opts, {
             callback: function(r) {
                 if (r.exc) {
-                    cur_list?.refresh();
+                    restoreDroppedCard(docname, from_colname);
                     return;
                 }
                 settleDroppedCard(docname, to_colname, r.message);
             }
-        }));
+        })).fail(() => restoreDroppedCard(docname, from_colname));
+
+        return handled;
     }
 
     function settleDroppedCard(docname, colname, board) {
@@ -229,16 +274,7 @@
             if (column) column.order = col.order;
         });
 
-        const $card = findCard(docname).css("opacity", "");
-        const $column = $(`.kanban-column[data-column-value="${CSS.escape(colname)}"]`);
-        const $cards = $column.find(".kanban-cards");
-        if (!$card.length || !$cards.length) return;
-
-        // A failed drop of another card, meanwhile, redraws the board from the
-        // old state and so puts this card back in its old column.
-        if (!$.contains($cards[0], $card[0])) {
-            $card.appendTo($cards);
-        }
+        const $card = placeCard(docname, colname);
 
         const fieldname = cur_list?.board?.field_name || "status";
         const $field = $card.find(`[data-fieldname="${fieldname}"]`);
@@ -246,11 +282,29 @@
             $field.attr("data-current-value", colname);
             updateFieldDisplay($field, "status", colname);
         }
+    }
 
+    function restoreDroppedCard(docname, colname) {
+        recentMoves.delete(docname);
+        placeCard(docname, colname);
+    }
+
+    function placeCard(docname, colname) {
+        const $card = findCard(docname).removeClass("kanban-card-saving");
+        const $column = findColumn(colname);
+        const $cards = $column.find(".kanban-cards");
+        if (!$card.length || !$cards.length) return $card;
+
+        if (!$.contains($cards[0], $card[0])) {
+            $card.appendTo($cards);
+        }
         reorderColumnByPriority($column, $card[0]);
+        return $card;
     }
 
     function recordCardColumn(docname, colname) {
+        recentMoves.set(docname, { column: colname, at: Date.now() });
+
         const card = cardObjects.get(docname);
         if (!card) return;
         // Changing a card in place does not set off Frappe's store watchers.
@@ -260,28 +314,117 @@
 
     function findCard(docname) {
         const $wrapper = getKanbanWrapper() || $(document);
-        return $wrapper.find(`.kanban-card-wrapper[data-name="${CSS.escape(encodeURIComponent(docname))}"]`);
+        // Not the ghost Sortable keeps following the pointer during a drag.
+        return $wrapper.find(`.kanban-card-wrapper[data-name="${CSS.escape(encodeURIComponent(docname))}"]:not(.sortable-fallback)`);
+    }
+
+    // Within this board only: Frappe keeps other boards' pages in the DOM, and
+    // jQuery copies a card appended to more than one column.
+    function findColumn(colname) {
+        const $wrapper = getKanbanWrapper() || $(document);
+        return $wrapper.find(`.kanban-column[data-column-value="${CSS.escape(colname)}"]`);
     }
 
     // Opening a board, Frappe asks the server for the column order and then
-    // draws the whole board a second time with it. Skip that when the order
-    // came back as it already is.
-    function skipUnchangedOrder(callback) {
-        return function(r) {
-            const [board, updatedCards] = r.message || [];
-            const current = cur_list?.board?.columns || [];
-            const unchanged = !!board
-                && !(updatedCards || []).length
-                && board.columns.length === current.length
-                && board.columns.every(col => {
-                    const shown = current.find(c => c.column_name === col.column_name);
-                    return shown && shown.order === col.order && shown.status === col.status;
-                });
+    // draws the whole board a second time with it, or a third if the request
+    // fails. Sorting the cards already on screen is enough.
+    function saveOpeningOrder(opts) {
+        state.originalFrappeCall.call(frappe, Object.assign({}, opts, {
+            callback: r => sortColumnsByOrder(r.message?.[0])
+        }));
+        return $.Deferred().resolve().promise();
+    }
 
-            if (!unchanged && callback) {
-                return callback.apply(this, arguments);
+    function sortColumnsByOrder(board) {
+        if (isDragging()) {
+            afterDrag.push(() => sortColumnsByOrder(board));
+            return;
+        }
+
+        (board?.columns || []).forEach(col => {
+            const column = columnObjects.get(col.column_name);
+            if (!column || column.order === col.order) return;
+            column.order = col.order;
+
+            const rank = new Map(
+                JSON.parse(col.order || "[]").map((name, i) => [encodeURIComponent(name), i])
+            );
+            const $cards = findColumn(col.column_name).find(".kanban-cards");
+            // Cards the order doesn't list yet go first, as Frappe draws them.
+            $cards.append($cards.children(".kanban-card-wrapper").toArray().sort(
+                (a, b) => (rank.get(a.dataset.name) ?? -1) - (rank.get(b.dataset.name) ?? -1)
+            ));
+        });
+    }
+
+    // ==================== BOARD REDRAWS ====================
+
+    // Frappe refreshes every list each 5 minutes, whatever the person is doing.
+    // On a board each refresh empties the page and builds it from scratch, adding
+    // store watchers that are never released: every one redraws the whole board
+    // on the next refresh, so the work grows the longer the page stays open, until
+    // the tab hangs. A card in hand at that moment stays on the page next to its
+    // redrawn self, and can land in a column that no longer exists.
+    //
+    // Here a refresh only redraws the cards, only if the data changed, and waits
+    // for a drag to end. The first draw, and coming back from another board
+    // (Frappe's store holds one board at a time), still go through Frappe's.
+    function patchBoardRender() {
+        const proto = frappe.views?.KanbanView?.prototype;
+        if (!proto || state.renderPatched) return;
+        state.renderPatched = true;
+
+        const render = proto.render;
+        proto.render = function() {
+            if (this.doctype !== TARGET_DOCTYPE) return render.apply(this, arguments);
+
+            if (isDragging()) {
+                afterDrag.push(() => this.render());
+                return;
             }
+
+            this.board.fields = [...CARD_FIELDS];
+            keepRecentMoves(this);
+
+            const data = JSON.stringify(this.data);
+            const shown = this.kanban
+                && state.shownBoard === this
+                && this.$result.find(".kanban").length;
+
+            if (!shown) {
+                state.shownBoard = this;
+                render.apply(this, arguments);
+            } else if (data !== this.shownData) {
+                const positions = captureScrollPositions();
+                this.kanban.update(this.data);
+                setTimeout(() => restoreScrollPositions(positions), 0);
+            }
+            this.shownData = data;
         };
+
+        // Frappe's get_fields() adds the board's field again on every call. The
+        // request then never looks the same as the last one, which defeats the
+        // list's 3-second refresh throttle, and it keeps growing.
+        const getFields = proto.get_fields;
+        proto.get_fields = function() {
+            const count = this.fields.length;
+            const fields = getFields.apply(this, arguments);
+            if (this.doctype === TARGET_DOCTYPE) this.fields.length = count;
+            return fields;
+        };
+    }
+
+    function keepRecentMoves(view) {
+        const now = Date.now();
+        recentMoves.forEach((move, name) => {
+            if (!move.saving && now - move.at > RECENT_MOVE_MS) recentMoves.delete(name);
+        });
+        if (!recentMoves.size) return;
+
+        view.data.forEach(row => {
+            const move = recentMoves.get(row.name);
+            if (move) row[view.board.field_name] = move.column;
+        });
     }
 
     // ==================== PERMISSIONS ====================
@@ -461,6 +604,9 @@
                     self.$card = $(frappe.render_template("kanban_card", opts)).appendTo(wrapper);
                     // Read by reorderColumnByPriority, as priority is not shown on the card.
                     self.$card.attr("data-priority", card.doc?.priority || "");
+                    if (recentMoves.get(card.name)?.saving) {
+                        self.$card.addClass("kanban-card-saving");
+                    }
 
                     // Bake in the collapse toggle button (no per-card listener needed; delegated)
                     self.$card.find(".kanban-card").append(
@@ -597,6 +743,7 @@
 
     // Call early, before kanban loads
     overrideKanbanBoardCard();
+    patchBoardRender();
 
     // ==================== DROPDOWN UI ====================
 
@@ -718,7 +865,7 @@
     function moveCardToColumn($card, newStatus) {
         if (!$card.length) return;
 
-        const $targetColumn = $(`.kanban-column[data-column-value="${newStatus}"]`);
+        const $targetColumn = findColumn(newStatus);
         if (!$targetColumn.length) return;
 
         const $currentColumn = $card.closest(".kanban-column");
@@ -727,16 +874,20 @@
         const $targetCards = $targetColumn.find(".kanban-cards");
         if (!$targetCards.length) return;
 
-        requestAnimationFrame(() => {
-            $card.detach().appendTo($targetCards);
-            updateColumnCount($currentColumn, -1);
-            updateColumnCount($targetColumn, 1);
-            reorderColumnByPriority($targetColumn, $card[0]);
-        });
+        $card.detach().appendTo($targetCards);
+        updateColumnCount($currentColumn, -1);
+        updateColumnCount($targetColumn, 1);
+        reorderColumnByPriority($targetColumn, $card[0]);
     }
 
     function reorderColumnByPriority($column, movedCard = null) {
         if (!$column?.length) return;
+
+        // Re-inserting cards would pull the one in hand along with them.
+        if (isDragging()) {
+            afterDrag.push(() => reorderColumnByPriority($column, movedCard));
+            return;
+        }
 
         const $cardsContainer = $column.find(".kanban-cards");
         if (!$cardsContainer.length) return;
@@ -767,11 +918,9 @@
             return 0;
         });
 
-        requestAnimationFrame(() => {
-            const fragment = document.createDocumentFragment();
-            cards.forEach(card => fragment.appendChild(card));
-            $cardsContainer[0].appendChild(fragment);
-        });
+        const fragment = document.createDocumentFragment();
+        cards.forEach(card => fragment.appendChild(card));
+        $cardsContainer[0].appendChild(fragment);
     }
 
     function updateColumnCount($column, delta) {
@@ -787,7 +936,7 @@
     function applyBoardFilters() {
         const board = cur_list?.board;
         if (cur_list?.board?.fields) {
-            cur_list.board.fields = ["status", "type", "custom_utilization"];
+            cur_list.board.fields = [...CARD_FIELDS];
         }
         normalizeBoardFields();
         const boardName = board?.name;
@@ -899,6 +1048,11 @@
         initPermissions();
         setupThemeListener();
         patchFrappeCallForScrollPreservation();
+        patchBoardRender();
+
+        ["pointerup", "pointercancel", "mouseup", "touchend", "touchcancel"].forEach(event => {
+            document.addEventListener(event, runAfterDrag);
+        });
 
         // Cache icon HTML once (avoid re-rendering SVG per card)
         ICON_EXPAND_HTML = frappe.utils.icon("expand", "sm");

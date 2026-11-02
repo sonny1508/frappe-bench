@@ -121,6 +121,13 @@ body[data-route^="List/Task/Kanban"] .kanban-card-wrapper {
     contain-intrinsic-size: auto 110px;
 }
 
+/* A dropped card while it saves: it can't be picked up again until the server
+   has answered, so two saves of one card can't race each other. */
+.kanban-card-saving {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
 /* ========================================
    KANBAN COLLAPSIBLE
    ======================================== */
