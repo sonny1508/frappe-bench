@@ -2,14 +2,17 @@ import frappe
 from frappe import _
 
 @frappe.whitelist(allow_guest=True)
-def get_login_backgrounds(folder="login_backgrounds"):
-    """Get list of background images from a folder in File Manager"""
-    
-    # Get files from the specified folder
+def get_login_backgrounds():
+    """Get list of background images from the login_backgrounds folder in File Manager.
+
+    Open to guests because the login page needs it, so the folder is fixed: with a
+    folder argument, anyone could list any folder's files without logging in.
+    """
+
     files = frappe.get_all(
         "File",
         filters={
-            "folder": f"Home/{folder}",
+            "folder": "Home/login_backgrounds",
             "is_folder": 0,
         },
         fields=["file_url"],

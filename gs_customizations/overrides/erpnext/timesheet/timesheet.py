@@ -188,6 +188,9 @@ def get_timesheet_validation_context(employee, company):
         get_holiday_dates,
         is_checkin_enabled,
     )
+    from gs_customizations.validate.permissions import validate_timesheet_context_access
+
+    validate_timesheet_context_access(employee)
 
     company_hours = _get_company_working_hours_float(company)
 

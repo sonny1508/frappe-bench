@@ -32,6 +32,16 @@ def validate_leave_access(employee, leave_application=None):
     ):
         frappe.throw("Not permitted", frappe.PermissionError)
 
+def validate_timesheet_context_access(employee):
+    """Allow an employee's absent days and leave hours, which the Timesheet form needs, only to
+    them, managers, and anyone who can read the Employee."""
+    if (
+        frappe.db.get_value("Employee", employee, "user_id") != frappe.session.user
+        and not is_manager()
+        and not frappe.has_permission("Employee", "read", employee)
+    ):
+        frappe.throw("Not permitted", frappe.PermissionError)
+
 def has_project_permission(doc, ptype=None, user=None):
     """
     Block all permission types (read, write, create, delete) from restricted network.

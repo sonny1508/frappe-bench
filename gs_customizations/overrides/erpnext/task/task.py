@@ -21,6 +21,7 @@ from gs_customizations.overrides.erpnext.task.overdue_priority import (
 class CustomTask(Task):
 
 	def validate(self):
+		self.validate_web_form_project_permission()
 		self.validate_dates()
 		self.validate_progress()
 		self.validate_status()

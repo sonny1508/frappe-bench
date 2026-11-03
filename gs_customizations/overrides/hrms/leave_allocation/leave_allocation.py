@@ -87,7 +87,7 @@ class CustomLeaveAllocation(LeaveAllocation):
 
 		return ledger_entries[0].total_leaves if ledger_entries else 0
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def set_total_leaves_allocated(self):
 		self.custom_unused_time_leaves = flt(
 			get_carry_forwarded_leaves(self.employee, self.leave_type, self.from_date, self.carry_forward)
@@ -255,7 +255,7 @@ class CustomLeaveAllocation(LeaveAllocation):
 		)
 		create_leave_ledger_entry(self, args, submit)
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def allocate_leaves_manually(self, new_leaves, from_date=None):
 		"""Manual allocation (new_leaves in seconds)"""
 		if from_date and not (getdate(self.from_date) <= getdate(from_date) <= getdate(self.to_date)):

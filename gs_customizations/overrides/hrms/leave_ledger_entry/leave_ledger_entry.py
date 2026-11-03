@@ -238,7 +238,7 @@ def create_expiry_ledger_entry(allocations):
 			expire_allocation(allocation)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def expire_allocation(allocation, expiry_date=None):
 	"""
 	Expires non-carry forwarded allocation.

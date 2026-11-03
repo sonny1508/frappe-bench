@@ -3,7 +3,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!document.getElementById('page-login')) return;
 
     // Configuration
-    const IMAGE_FOLDER = 'login_backgrounds'; // Folder name in File Manager
     const SLIDE_DURATION = 10000;
     const FADE_DURATION = 1500;   // 1.5 second fade (matches CSS transition)
 
@@ -15,7 +14,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Fetch images and start slideshow
     frappe.call({
         method: 'gs_customizations.api.get_login_backgrounds',
-        args: { folder: IMAGE_FOLDER },
         async: true,
         callback: function(r) {
             if (r.message && r.message.length > 0) {
